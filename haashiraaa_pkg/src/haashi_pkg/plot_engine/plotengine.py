@@ -8,13 +8,17 @@ from typing import (
     Dict,
     Union,
     Optional,
-    Iterable
+    Iterable,
+    Sequence
 )
 
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
+
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
+import matplotlib.ticker as ticker
 from matplotlib.ticker import StrMethodFormatter
 from pandas import Series, Timestamp
 
@@ -44,7 +48,12 @@ YData = Union[
 
 PlotType = Literal["line", "bar", "scatter", "pie"]
 
-Kwargs = Dict[str, Union[str, int, float, tuple[int]]]
+Kwargs = Dict[str, Union[
+    str, int, float, bool,
+    Sequence[int], Sequence[float],
+    Optional[str], Optional[int],
+    Tuple[int, ...], Tuple[float, ...]
+]]
 
 
 # ----------------------------
@@ -87,7 +96,15 @@ class PlotEngine:
     def setup(
         self,
         figsize: Tuple[int, int] = (10, 6),
+        seaborn_theme: str = "whitegrid",
+        seaborn_context: str = "notebook",
     ) -> Tuple[Figure, Axes]:
+
+        sns.set_theme(
+            style=seaborn_theme,
+            context=seaborn_context,
+        )
+
         fig, ax = plt.subplots(figsize=figsize)
         return fig, ax
 
@@ -136,12 +153,10 @@ class PlotEngine:
         elif plot_type == "pie":
             ax.pie(y, **kwargs)
 
-        else:
-            raise ValueError(f"Unsupported plot type: {plot_type}")
-
     # ----------------------------
     # DECORATE
     # ----------------------------
+
     def set_labels_and_title(
         self,
         ax: Axes,
@@ -194,11 +209,23 @@ class PlotEngine:
         positions: Optional[np.ndarray] = None,
         rotation: int = 45
     ) -> None:
+
         if positions is None:
-            positions = range(len(labels))
+            positions = np.arange(len(labels))
+
+        if len(labels) != len(positions):
+            raise ValueError("labels and positions must be the same length")
 
         ax.set_xticks(positions)
         ax.set_xticklabels(labels, rotation=rotation, ha="right")
+
+    def force_yticks(self, ax: Axes, nbins: int = 10) -> None:
+        ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=nbins))
+
+    def add_margins(
+        self, ax: Axes, xpad: float = 0.05, ypad: float = 0.2
+    ) -> None:
+        ax.margins(x=xpad, y=ypad)
 
     def set_legend(
         self,
@@ -223,11 +250,11 @@ class PlotEngine:
         fig.tight_layout()
 
         if save_path is not None:
-            fig.savefig(save_path, dpi=dpi)
-            self.ut.info(f"Saved figure to {save_path}")
+            safe_save_path = self.ut.ensure_writable_path(save_path)
+            fig.savefig(safe_save_path, dpi=dpi)
+            self.ut.info(f"Saved figure to {safe_save_path}")
 
         if show:
             plt.show()
 
         plt.close(fig)
-
