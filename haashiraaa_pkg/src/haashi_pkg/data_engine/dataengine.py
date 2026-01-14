@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import pandas as pd
-import logging
 import json
 from pandas import DataFrame, Series
-from haashi_pkg.utility.utils import Utility
 from typing import (
     List,
     Sequence,
@@ -23,7 +21,6 @@ from typing import (
 pd.set_option("display.width", 200)
 pd.set_option("display.max_columns", None)
 
-ut = Utility(level=logging.INFO)
 
 # =========================
 # Type aliases
@@ -276,4 +273,3 @@ class DataEngine:
         if isinstance(op, (list, tuple)):
             return gb.agg([o.lower() for o in op])
         return getattr(gb, op.lower())()
-

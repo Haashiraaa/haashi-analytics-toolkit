@@ -7,6 +7,7 @@ import textwrap
 import logging
 import sys
 import json
+import time
 from typing import Any, List, Union, Optional
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
@@ -90,11 +91,12 @@ class Utility:
 
     # -------- UI/UX methods --------
 
-    def clear_screen(self) -> None:
+    def clear_screen(self, timeout: float = 0) -> None:
         """Clear the terminal screen (cross-platform)."""
+        time.sleep(timeout)
         os.system("cls" if os.name == "nt" else "clear")
 
-    def clear_line(self, n: int = 1) -> None:
+    def clear_line(self, n: int = 1, timeout: float = 0.5) -> None:
         """
         Clear the previous N lines in the terminal.
                                                                                     Parameters:
@@ -104,6 +106,7 @@ class Utility:
             - \033[1A → move cursor up by one line
             - \033[2K → clear the entire current line
         """
+        time.sleep(timeout)
         for _ in range(n):
             sys.stdout.write("\033[1A")     # Move cursor up
             sys.stdout.write("\r\033[2K")   # Clear line
@@ -141,14 +144,18 @@ class Utility:
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 
-    def ensure_readable_file(self, path: PathLike) -> Optional[Path]:
+    def ensure_readable_file(self, path: PathLike) -> Path:
         """
         Ensure a file exists for reading.
         """
         path = Path(path)
+
         if not path.exists():
-            return None
-            # raise FileNotFoundError(f"File not found: {path}")
+            raise FileNotFoundError(f"File not found: {path}")
+
+        if not path.is_file():
+            raise ValueError(f"Not a file: {path}")
+
         return path
 
     def save_json(

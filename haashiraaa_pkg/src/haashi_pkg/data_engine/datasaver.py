@@ -3,6 +3,8 @@
 from pandas import DataFrame
 from typing import Optional
 
+from haashi_pkg.utility.utils import Utility
+
 
 class DataSaver:
     """Save pandas DataFrames to disk in multiple formats."""
@@ -10,6 +12,7 @@ class DataSaver:
     def __init__(self, save_path: Optional[str] = None) -> None:
         """Initialize with an optional default save path."""
         self.save_path = save_path
+        self.ut = Utility()
 
     # ========================
     # Validate save path
@@ -31,7 +34,7 @@ class DataSaver:
                 f"Save path must end with '{file_type}', got '{path}'"
             )
 
-        return path
+        return str(self.ut.ensure_writable_path(path))
 
     # ========================
     # Confirm file saved
@@ -88,4 +91,3 @@ class DataSaver:
             index=False
         )
         self.confirm_saved(path)
-
