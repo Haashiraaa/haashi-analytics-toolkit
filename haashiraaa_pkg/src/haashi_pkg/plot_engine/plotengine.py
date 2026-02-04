@@ -711,7 +711,7 @@ class PlotEngine:
         if save_path is not None:
             safe_save_path = self.ut.ensure_writable_path(save_path)
             fig.savefig(safe_save_path, dpi=dpi)
-            self.ut.info(f"Saved figure to {safe_save_path}")
+            self.ut.debug(f"Saved figure to {safe_save_path}")
 
         if show:
             plt.show()

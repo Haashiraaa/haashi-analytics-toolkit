@@ -8,6 +8,7 @@ import logging
 import sys
 import json
 import time
+import subprocess
 from typing import Any, List, Union, Optional
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
@@ -112,6 +113,25 @@ class Utility:
             sys.stdout.write("\r\033[2K")   # Clear line
         sys.stdout.flush()
 
+    def animate(
+            self, r: int = 2, text: str = 'Signing in', sec: float = 0.5
+    ) -> None:
+        """
+        Display a simple loading animation for CLI transitions.
+
+        Parameters:
+            r (int): number of animation cycles (unused internally but kept for compat)
+            text (str): text prefix for animation
+            sec (float): delay between frames
+
+        """
+
+        for cycle in range(r):
+            for dots in range(1, 4):
+                sys.stdout.write(f'\r{text}{"." * dots}')
+                sys.stdout.flush()
+                time.sleep(sec)
+
     def format_text(self, text: str, width: int = 70) -> str:
         """
         Wrap long text to fit nicely on smaller screens.
@@ -159,32 +179,62 @@ class Utility:
         return path
 
     def save_json(
-        self, data: DictFormat, path: Path, operation: str = "w"
+        self, data: DictFormat, path: PathLike, operation: str = "w"
     ) -> None:
+        path = self.ensure_writable_path(path)
         with open(path, operation) as file:
             json.dump(data, file, indent=4)
         self.info(f"Data saved -> {path}")
 
-    def read_json(self, path: Path) -> DictFormat:
+    def read_json(self, path: PathLike) -> DictFormat:
+        path = self.ensure_readable_file(path)
         with open(path, "r") as file_content:
             return json.load(file_content)
 
     def save_txt(
-        self, data: str, path: Path, operation: str = "w"
+        self, data: str, path: PathLike, operation: str = "w"
     ) -> None:
+        path = self.ensure_writable_path(path)
         with open(path, operation) as file:
             file.write("\n")
             file.write(data)
         self.info(f"Data saved -> {path}")
 
-    def read_txt(self, path: Path) -> str:
+    def read_txt(self, path: PathLike) -> str:
+        path = self.ensure_readable_file(path)
         with open(path, "r") as file_content:
             return file_content.read()
 
     # ---------------- Datetime methods -------------------- #
 
-    def get_current_time(self, utc_offset_hours: int = 0) -> str:
+    def get_current_time(
+            self, utc_offset_hours: int = 0, only_date: bool = True
+    ) -> str:
         current_time = (
             datetime.now(timezone.utc) + timedelta(hours=utc_offset_hours)
         )
+        if only_date:
+            return current_time.strftime("%Y-%m-%d")
+
         return current_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    # ---------------- Copying and Pasting methods -------------------- #
+
+    def copy(self, text: str) -> None:
+        """
+        Copy text to the Termux clipboard.
+        Usage: copy("hello world")
+        """
+        subprocess.run(["termux-clipboard-set"], input=text, text=True)
+
+    def paste(self) -> str:
+        """
+        Paste text from the Termux clipboard.
+        Usage: text = paste()
+        """
+        result = subprocess.run(
+            ["termux-clipboard-get"],
+            capture_output=True,
+            text=True
+        )
+        return result.stdout

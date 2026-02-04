@@ -273,3 +273,18 @@ class DataEngine:
         if isinstance(op, (list, tuple)):
             return gb.agg([o.lower() for o in op])
         return getattr(gb, op.lower())()
+
+    # ==============
+    # Joins
+    # ==============
+
+    def merge(
+        self,
+        df1: DataFrame,
+        df2: DataFrame,
+        merge_col: list[str] | str,
+        how: str = "left",
+        validate: str = "1:1"
+    ) -> DataFrame:
+
+        return pd.merge(df1, df2, on=merge_col, how=how, validate=validate)

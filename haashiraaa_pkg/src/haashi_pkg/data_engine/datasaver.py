@@ -42,7 +42,7 @@ class DataSaver:
 
     def confirm_saved(self, path: str) -> None:
         """Print confirmation after a successful save."""
-        print(f"File saved → {path}")
+        self.ut.debug(f"File saved → {path}")
 
     # ========================
     # Save to CSV
