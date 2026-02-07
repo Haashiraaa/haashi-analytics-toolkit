@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "haashi_pkg"
+version = "1.0.0"
+description = "A modular Python toolkit for analytics workflows, including data processing, visualization, and reusable utilities."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Haashiraaa"}
+]
+keywords = [
+    "data-analysis",
+    "data-processing",
+    "visualization",
+    "pandas",
+    "matplotlib",
+    "seaborn",
+    "utilities",
+    "analytics"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "pandas>=2.0.0",
+    "seaborn>=0.12.0",
+    "matplotlib>=3.7.0",
+    "numpy>=1.24.0",
+    "pyarrow>=12.0.0",
+    "openpyxl>=3.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.urls]
+Homepage = "https://github.com/Haashiraaa"
+Repository = "https://github.com/Haashiraaa/haashi-analytics-toolkit"
+Documentation = "https://github.com/Haashiraaa/haashi-analytics-toolkit/blob/main/README.md"
+Issues = "https://github.com/Haashiraaa/haashi-analytics-toolkit/issues"
