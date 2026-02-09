@@ -223,8 +223,8 @@ class Logger:
             self.logger.addHandler(handler)
 
         # Initialize error logger for JSON persistence
-        log_path = error_log_path or "logs/errors.json"
-        self.error_logger = ErrorLogger(log_path)
+        self.log_path = error_log_path or "logs/errors.json"
+        self.error_logger = ErrorLogger(self.log_path)
 
     def info(self, message: Any) -> None:
         """
@@ -255,7 +255,7 @@ class Logger:
 
     def error(
         self,
-        message: Any,
+        message: Any | None = None,
         exception: Optional[Exception] = None,
         save_to_json: bool = False,
         context: Optional[str] = None
@@ -275,6 +275,14 @@ class Logger:
             ... except Exception as e:
             ...     logger.error("Operation failed", exception=e, save_to_json=True, context="data_load")
         """
+
+        message = (
+            str(message)
+            if message
+            else
+            f"Oops - something went wrong! See {self.log_path} for details."
+        )
+
         self.logger.error(str(message))
 
         if save_to_json and exception:

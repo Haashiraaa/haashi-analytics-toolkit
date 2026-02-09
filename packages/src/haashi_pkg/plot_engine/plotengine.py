@@ -1,7 +1,4 @@
-
-
 # plotengine.py
-
 """
 PlotEngine: A comprehensive plotting utility built on matplotlib and seaborn.
 
@@ -40,6 +37,7 @@ from typing import (
     List
 )
 
+
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -51,7 +49,7 @@ from matplotlib.ticker import StrMethodFormatter
 import matplotlib.gridspec as gridspec
 from pandas import Series, Timestamp
 
-from haashi_pkg.utility.utils import Logger
+from haashi_pkg.utility import Logger, FileHandler
 
 # ----------------------------
 # TYPE ALIASES
@@ -175,15 +173,16 @@ class PlotEngine:
         >>> pe.save_or_show(fig, save_path='sales.png')
     """
 
-    def __init__(self, logger: None | Logger = None) -> None:
+    def __init__(self, logger: Logger | None = None) -> None:
         """
         Initialize the PlotEngine with default settings and color palettes.
 
         Sets up the utility logger and defines four different color palettes
         for various visualization needs.
         """
-        self.logger: Logger = Logger(
-            level=logging.DEBUG) if logger is None else logger
+        self.logger: Logger = logger if logger else Logger(
+            level=logging.DEBUG)
+        self.handler: FileHandler = FileHandler(logger=self.logger)
 
         self.colors_01: list[str] = [
             "#4E79A7",  # blue
@@ -221,6 +220,33 @@ class PlotEngine:
     # ----------------------------
     # SETUP
     # ----------------------------
+
+    def _set_theme_safe(
+        self,
+        style: ThemeType = "darkgrid",
+        context: ContextType = "notebook",
+    ) -> None:
+        """
+        Safely set seaborn theme without breaking logging configuration.
+
+        Seaborn's set_theme() can interfere with logging handlers.
+        This method preserves the logging configuration.
+
+        Args:
+            style: Seaborn theme style
+            context: Seaborn context for scaling
+        """
+        # Save current logging configuration
+        root_logger = logging.getLogger()
+        original_level = root_logger.level
+        original_handlers = root_logger.handlers.copy()
+
+        # Set seaborn theme
+        sns.set_theme(style=style, context=context)
+
+        # Restore logging configuration
+        root_logger.setLevel(original_level)
+        root_logger.handlers = original_handlers
 
     def create_figure(
         self,
@@ -278,7 +304,7 @@ class PlotEngine:
             ... )
         """
         try:
-            sns.set_theme(
+            self._set_theme_safe(
                 style=seaborn_theme,
                 context=seaborn_context,
             )
@@ -385,7 +411,9 @@ class PlotEngine:
             )
 
         try:
-            sns.set_theme(style=seaborn_theme, context=seaborn_context)
+            self._set_theme_safe(
+                style=seaborn_theme, context=seaborn_context
+            )
 
             fig = plt.figure(figsize=figsize)
 
@@ -1250,6 +1278,80 @@ class PlotEngine:
                 f"Failed to set legend: {str(e)}"
             ) from e
 
+    def set_suptitle(
+        self,
+        fig: Figure,
+        title: str,
+        *,
+        fontsize: int = 16,
+        fontweight: str = "bold",
+        color: str = "black",
+        **kwargs: Any,
+    ) -> None:
+        """
+        Set the main title for the entire figure (suptitle).
+
+        This is different from ax.set_title() which sets the title for a single
+        axes. Use this for the overall figure title when you have multiple subplots.
+
+        Args:
+            fig: The matplotlib Figure object to modify
+            title: The title text to display
+            fontsize: Font size for the title in points. Default is 16.
+            fontweight: Font weight. Options:
+                - 'normal': Regular weight
+                - 'bold': Bold (default)
+                - 'light': Light weight
+                - Numeric: 100-900
+            color: Title text color. Default is 'black'.
+            **kwargs: Additional keyword arguments passed to fig.suptitle().
+                     Common options:
+                     - x: float, x position (0-1)
+                     - y: float, y position (0-1)
+                     - ha: horizontal alignment ('left', 'center', 'right')
+                     - va: vertical alignment ('top', 'center', 'bottom')
+
+        Example:
+            >>> fig, axes = pe.create_figure(2, 2)
+            >>> 
+            >>> # Set individual subplot titles
+            >>> axes[0, 0].set_title('Subplot 1')
+            >>> axes[0, 1].set_title('Subplot 2')
+            >>> 
+            >>> # Set overall figure title
+            >>> pe.set_suptitle(fig, 'Overall Dashboard Title')
+
+            >>> # Custom styling
+            >>> pe.set_suptitle(
+            ...     fig,
+            ...     'My Dashboard',
+            ...     fontsize=20,
+            ...     color='navy',
+            ...     fontweight='bold'
+            ... )
+
+            >>> # Custom positioning
+            >>> pe.set_suptitle(
+            ...     fig,
+            ...     'Report Title',
+            ...     y=0.98,  # Higher position
+            ...     ha='left',
+            ...     x=0.1
+            ... )
+        """
+        try:
+            fig.suptitle(
+                title,
+                fontsize=fontsize,
+                fontweight=fontweight,
+                color=color,
+                **kwargs
+            )
+        except Exception as e:
+            raise ConfigurationError(
+                f"Failed to set figure suptitle: {str(e)}"
+            ) from e
+
     # ----------------------------
     # FINALIZE
     # ----------------------------
@@ -1332,7 +1434,8 @@ class PlotEngine:
                 fig.tight_layout()
 
             if save_path is not None:
-                safe_save_path = self.ut.ensure_writable_path(save_path)
+                safe_save_path = self.handler.ensure_writable_path(
+                    save_path)
                 fig.savefig(safe_save_path, dpi=dpi)
                 self.logger.debug(f"Saved figure to {safe_save_path}")
 
