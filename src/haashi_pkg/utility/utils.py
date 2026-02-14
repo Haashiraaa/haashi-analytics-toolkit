@@ -385,7 +385,7 @@ class FileHandler:
             path = self.ensure_writable_path(path)
             with open(path, mode) as f:
                 json.dump(data, f, indent=indent)
-            self.logger.info(f"JSON saved → {path}")
+            self.logger.debug(f"JSON saved → {path}")
         except Exception as e:
             raise FileOperationError(
                 f"Failed to save JSON to {path}: {e}") from e
@@ -439,7 +439,7 @@ class FileHandler:
                 if add_newline_prefix:
                     f.write("\n")
                 f.write(data)
-            self.logger.info(f"TXT saved → {path}")
+            self.logger.debug(f"TXT saved → {path}")
         except Exception as e:
             raise FileOperationError(
                 f"Failed to save TXT to {path}: {e}") from e
