@@ -543,6 +543,50 @@ class ScreenUtil:
                 time.sleep(delay)
 
     @staticmethod
+    def wait_and_enter(message: str = "Press Enter to continue...") -> None:
+        """
+        Pause execution until user presses Enter.
+
+        Useful for interactive scripts that need manual intervention or 
+        confirmation between steps. Commonly used in pipelines to review
+        output before proceeding.
+
+        Args:
+            message: Custom prompt message (default: "Press Enter to continue...")
+
+        Raises:
+            KeyboardInterrupt: If user interrupts with Ctrl+C
+
+        Example:
+            >>> from haashi_pkg.utility import FileHandler
+            >>> 
+            >>> handler = FileHandler()
+            >>> 
+            >>> # Simple pause
+            >>> handler.wait_and_enter()
+            Press Enter to continue...
+            [User presses Enter]
+            >>> 
+            >>> # Custom message
+            >>> handler.wait_and_enter("Review the output above before continuing")
+            Review the output above before continuing
+            [User presses Enter]
+            >>> 
+            >>> # Use in pipeline
+            >>> def run_pipeline():
+            ...     step_1()
+            ...     handler.wait_and_enter("Check step 1 output. Press Enter for step 2...")
+            ...     step_2()
+            ...     handler.wait_and_enter("Check step 2 output. Press Enter to finish...")
+            ...     step_3()
+        """
+        try:
+            input(message)
+        except KeyboardInterrupt:
+            print("\nProcess interrupted by user")
+            raise
+
+    @staticmethod
     def format_text(text: str, width: int = 70) -> str:
         """
         Wrap long text to fit within specified character width.
