@@ -460,7 +460,7 @@ except DataTypeError as e:
 
 ### Backward Compatibility
 
-** Your old code still works!** Deprecated modules remain with warnings:
+Deprecated modules remain with warnings:
 
 ```python
 # OLD CODE - Still works but shows deprecation warning
@@ -548,7 +548,7 @@ Contributions welcome! Please ensure:
 ## Roadmap
 
 ### Planned Features
-- [ ] Additional file formats (JSON, more Excel support)
+- [ ] Additional file formats (Excel support)
 - [ ] Enhanced validation rules and custom validators
 - [ ] More plot types (heatmaps, box plots, violin plots)
 - [ ] Data profiling utilities
