@@ -80,6 +80,14 @@ Column = Union[str, Sequence[str]]
 AggOp = Union[str, Sequence[str]]
 MissingStats = Tuple[int, int, float]
 
+DataLike = Union[
+    Dict[str, List[Any]],
+    List[Dict[Any, Any]],
+    List[List[Any]]
+]
+ColumnLike = Optional[List[str]]
+IndexLike = Optional[List[Any]]
+
 
 # =========================
 # CUSTOM EXCEPTIONS
@@ -1902,3 +1910,127 @@ class DataSaver:
                 f"Failed to save compressed Parquet: {str(e)}",
                 path=path or self.save_path
             ) from e
+
+
+# =========================
+# DataFrame Factory
+# =========================
+
+class DataFrameFactory:
+    """
+    Factory for creating pandas DataFrames and Series
+    Provides convenience methods without requiring direct pandas import
+    """
+
+    @staticmethod
+    def create_dataframe(
+        data: DataLike,
+        columns: ColumnLike = None,
+        index: IndexLike = None
+    ) -> pd.DataFrame:
+        """
+        Create pandas DataFrame from various data structures
+
+        Args:
+            data: Dictionary of lists, list of dicts, or list of lists
+            columns: Optional column names (for list of lists)
+            index: Optional index
+
+        Returns:
+            pandas DataFrame
+
+        Examples:
+            >>> # From dictionary of lists
+            >>> df = DataFrameFactory.create_dataframe({
+            ...     'name': ['Alice', 'Bob'],
+            ...     'age': [25, 30]
+            ... })
+
+            >>> # From list of dictionaries
+            >>> df = DataFrameFactory.create_dataframe([
+            ...     {'name': 'Alice', 'age': 25},
+            ...     {'name': 'Bob', 'age': 30}
+            ... ])
+
+            >>> # From list of lists
+            >>> df = DataFrameFactory.create_dataframe(
+            ...     [['Alice', 25], ['Bob', 30]],
+            ...     columns=['name', 'age']
+            ... )
+        """
+        return pd.DataFrame(data, columns=columns, index=index)
+
+    @staticmethod
+    def create_series(
+        data: Union[List[Any], Dict[Any, Any]],
+        index: IndexLike = None,
+        name: Optional[str] = None
+    ) -> pd.Series:
+        """
+        Create pandas Series from list or dictionary
+
+        Args:
+            data: List or dictionary of values
+            index: Optional index
+            name: Optional series name
+
+        Returns:
+            pandas Series
+
+        Examples:
+            >>> # From list
+            >>> series = DataFrameFactory.create_series([1, 2, 3, 4, 5])
+
+            >>> # From dictionary
+            >>> series = DataFrameFactory.create_series({'a': 1, 'b': 2})
+
+            >>> # With name
+            >>> series = DataFrameFactory.create_series(
+            ...     [1, 2, 3],
+            ...     name='values'
+            ... )
+        """
+        return pd.Series(data, index=index, name=name)
+
+    @staticmethod
+    def from_records(
+        records: List[Dict[Any, Any]],
+        columns: ColumnLike = None
+    ) -> pd.DataFrame:
+        """
+        Create DataFrame from list of dictionaries (records)
+
+        Args:
+            records: List of dictionaries
+            columns: Optional column ordering
+
+        Returns:
+            pandas DataFrame
+
+        Example:
+            >>> records = [
+            ...     {'name': 'Alice', 'age': 25, 'city': 'Lagos'},
+            ...     {'name': 'Bob', 'age': 30, 'city': 'Abuja'}
+            ... ]
+            >>> df = DataFrameFactory.from_records(records)
+        """
+        df = pd.DataFrame.from_records(records)
+        if columns:
+            df = pd.DataFrame(df[columns])
+        return df
+
+    @staticmethod
+    def empty_dataframe(columns: List[str]) -> pd.DataFrame:
+        """
+        Create empty DataFrame with specified columns
+
+        Args:
+            columns: Column names
+
+        Returns:
+            Empty pandas DataFrame
+
+        Example:
+            >>> df = DataFrameFactory.empty_dataframe(['name', 'age', 'city'])
+        """
+        return pd.DataFrame(columns=columns)

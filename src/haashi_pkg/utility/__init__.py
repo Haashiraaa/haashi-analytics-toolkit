@@ -1,3 +1,5 @@
+
+
 # __init__.py
 """
 Utility Module for haashi_pkg
@@ -50,10 +52,11 @@ from haashi_pkg.utility.utils import (
     ScreenUtil,
     DateTimeUtil,
     ClipboardUtil,
-    
+    Colors,
+
     # Legacy class (deprecated)
     Utility,
-    
+
     # Exceptions
     UtilityError,
     FileOperationError,
@@ -68,14 +71,15 @@ __all__ = [
     'ScreenUtil',
     'DateTimeUtil',
     'ClipboardUtil',
-    
+    'Colors',
+
     # Legacy
     'Utility',
-    
+
     # Exceptions
     'UtilityError',
     'FileOperationError',
     'ClipboardError',
 ]
 
-__version__ = '1.0.0'
+__version__ = '1.2.0'

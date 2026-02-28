@@ -18,3 +18,6 @@ __all__ = [
     'InvalidFunctionError',
     'BenchmarkTimeoutError'
 ]
+
+
+__version__ = '1.2.0'

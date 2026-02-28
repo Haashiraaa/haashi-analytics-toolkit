@@ -18,6 +18,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-03-01
+
+### Added
+- **DataFrameFactory**: DataFrame and Series creation without direct pandas import
+  - `create_dataframe()`: Create DataFrame from various data structures
+  - `create_series()`: Create Series with flexible options
+  - `from_records()`: Build DataFrame from list of dictionaries
+  - `empty_dataframe()`: Initialize empty DataFrame with columns
+  
+  
+- **Colors utility**: Terminal color output for beautiful CLI
+  - Full ANSI color palette (16 colors + styles)
+  - Style modifiers: bold, underline, italic
+
+### Changed
+- Updated `data_engine/__init__.py` to export DataFrameFactory
+- Updated `utility/__init__.py` to export Colors
+
+
+---
+
 ## [1.1.0] - 2026-02-23
 
 ### Added

@@ -92,7 +92,7 @@ Advanced Example (Custom Grid):
 from haashi_pkg.plot_engine.plotengine import (
     # Main class
     PlotEngine,
-    
+
     # Exceptions
     PlotEngineError,
     InvalidPlotTypeError,
@@ -108,4 +108,4 @@ __all__ = [
     'ConfigurationError',
 ]
 
-__version__ = '1.0.0'
+__version__ = '1.2.0'

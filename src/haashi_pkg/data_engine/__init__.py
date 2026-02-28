@@ -56,6 +56,7 @@ from haashi_pkg.data_engine.data_engine import (
     DataAnalyzer,
     DataLoader,
     DataSaver,
+    DataFrameFactory,
 
     # Exceptions
     DataEngineError,
@@ -74,6 +75,7 @@ __all__ = [
     'DataAnalyzer',
     'DataLoader',
     'DataSaver',
+    'DataFrameFactory',
 
     # Backward compatibility
     'DataEngine',
@@ -86,4 +88,4 @@ __all__ = [
     'FileSaveError',
 ]
 
-__version__ = '1.0.0'
+__version__ = '1.2.0'
