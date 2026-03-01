@@ -66,6 +66,10 @@ from haashi_pkg.data_engine.data_engine import (
     FileSaveError,
 )
 
+# Public API bindings
+create_dataframe = DataFrameFactory.create_dataframe
+create_series = DataFrameFactory.create_series
+
 # For backward compatibility, also expose DataEngine as alias to DataAnalyzer
 # (Users importing from __init__ won't get deprecation warning)
 DataEngine = DataAnalyzer
@@ -76,6 +80,10 @@ __all__ = [
     'DataLoader',
     'DataSaver',
     'DataFrameFactory',
+
+    # Methods
+    'create_dataframe',
+    'create_series',
 
     # Backward compatibility
     'DataEngine',

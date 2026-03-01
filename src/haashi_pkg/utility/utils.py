@@ -667,6 +667,50 @@ class Colors:
     HIDDEN = '\033[8m'
     STRIKETHROUGH = '\033[9m'
 
+    @classmethod
+    def colored(
+            cls, text: str, color: str, style: Optional[str] = None) -> str:
+        """
+        Return colored text
+
+        Args:
+            text: Text to color
+            color: Color code
+            style: Optional style code
+
+        Returns:
+            Colored text string
+        """
+        if style:
+            return f"{style}{color}{text}{cls.RESET}"
+        return f"{color}{text}{cls.RESET}"
+
+    # Convenience methods
+    @classmethod
+    def success(cls, text: str) -> str:
+        """Success message (bold green)"""
+        return f"{cls.BOLD}{cls.GREEN}{text}{cls.RESET}"
+
+    @classmethod
+    def error(cls, text: str) -> str:
+        """Error message (bold red)"""
+        return f"{cls.BOLD}{cls.RED}{text}{cls.RESET}"
+
+    @classmethod
+    def warning(cls, text: str) -> str:
+        """Warning message (bold yellow)"""
+        return f"{cls.BOLD}{cls.YELLOW}{text}{cls.RESET}"
+
+    @classmethod
+    def info(cls, text: str) -> str:
+        """Info message (bold blue)"""
+        return f"{cls.BOLD}{cls.BLUE}{text}{cls.RESET}"
+
+    @classmethod
+    def header(cls, text: str) -> str:
+        """Header (bold cyan with underline)"""
+        return f"{cls.BOLD}{cls.UNDERLINE}{cls.CYAN}{text}{cls.RESET}"
+
 
 # ============================================================================
 # DATETIME UTILITIES
