@@ -1,6 +1,4 @@
 
-# utils.py
-
 """
 Utility Module for haashi_pkg
 ==============================
@@ -24,6 +22,7 @@ import sys
 import json
 import time
 import subprocess
+import inspect
 from typing import Any, List, Union, Optional, Dict
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
@@ -31,7 +30,7 @@ from datetime import datetime, timedelta, timezone
 
 # Type aliases
 PathLike = Union[str, Path]
-DictFormat = Dict[Any, Any]
+JsonFormat = Union[Dict[Any, Any], List[Any]]
 
 
 # ============================================================================
@@ -75,84 +74,208 @@ class ErrorLogger:
 
     def __init__(
         self,
-        error_log_path: PathLike = "logs/errors.json",
-        max_entries: int = 100
+        default_path: PathLike = "logs/errors.json",
+        max_entries: int = 100,
     ) -> None:
         """
         Initialize the error logger.
 
         Args:
-            error_log_path: Path where error JSON will be saved.
+            default: Path where error JSON will be saved.
             max_entries: Maximum number of errors to keep (auto-rotates old entries).
         """
-        self.error_log_path = Path(error_log_path)
+        self.default_path = Path(default_path)
         self.max_entries = max_entries
-        self._ensure_log_directory()
 
-    def _ensure_log_directory(self) -> None:
-        """Create log directory if it doesn't exist."""
-        self.error_log_path.parent.mkdir(parents=True, exist_ok=True)
+    def _ensure_path(self, path: Path) -> Path:
+        """
+        Ensure parent directories exist for file path.
 
-        # Initialize empty error log if doesn't exist
-        if not self.error_log_path.exists():
-            self._write_errors([])
+        Simple independent version - no FileHandler needed.
 
-    def _read_errors(self) -> List[DictFormat]:
-        """Read existing errors from JSON file."""
+        Args:
+            path: File path to validate
+
+        Returns:
+            Same path with guaranteed parent directories
+        """
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def _get_script_dir(self) -> Path:
+        """
+        Get the directory where the executed script is located.
+
+        Returns the directory of the main Python script that was run,
+        NOT the current working directory. This ensures files are saved
+        with the script regardless of where the command is executed from.
+
+        Returns:
+            Path: Directory containing the executed script
+
+        Example:
+            >>> # Script location: /home/user/project/process.py
+            >>> handler = FileHandler()
+            >>> script_dir = handler.get_script_dir()
+            >>> print(script_dir)
+            /home/user/project
+            >>> 
+            >>> # Save file in script's directory
+            >>> log_path = script_dir / "logs/output.json"
+            >>> handler.save_json(data, log_path)
+            >>> # Saves to: /home/user/project/logs/output.json
+            >>> 
+            >>> # Works the same regardless of where you run from:
+            >>> # Run from /home/user/project → saves to /home/user/project/logs/
+            >>> # Run from /home/user → saves to /home/user/project/logs/
+            >>> # Run from anywhere → saves to /home/user/project/logs/
+
+        Note:
+            Falls back to current working directory if main script
+            cannot be detected (e.g., in interactive Python sessions).
+        """
+        import sys
+
+        # Get the main script file that was executed
+        if hasattr(sys.modules['__main__'], '__file__'):
+            main_file = sys.modules['__main__'].__file__
+            if main_file:
+                script_dir = Path(main_file).resolve().parent
+
+                return script_dir
+
+        # Fallback to current working directory
+        fallback = Path.cwd()
+
+        return fallback
+
+    def _read_errors(self, path: Path) -> List[JsonFormat]:
+        """
+        Read existing errors from JSON file.
+
+        Args:
+            path: Path to error log file
+
+        Returns:
+            List of existing error entries, 
+            or empty list if file doesn't exist
+        """
         try:
-            with open(self.error_log_path, "r") as f:
-                return json.load(f)
+            if path.exists():
+                with open(path, "r", encoding="utf-8") as f:
+                    return json.load(f)
         except (json.JSONDecodeError, FileNotFoundError):
             return []
 
-    def _write_errors(self, errors: List[DictFormat]) -> None:
-        """Write errors to JSON file."""
-        with open(self.error_log_path, "w") as f:
-            json.dump(errors, f, indent=2)
+        return []
+
+    def _write_errors(self, errors: List[JsonFormat], path: Path) -> None:
+        """
+        Write errors to JSON file.
+
+        Args:
+            errors: List of error entries to write
+            path: Path where to save the JSON file
+        """
+        # Ensure directory exists
+        validated_path = self._ensure_path(path)
+
+        # Write JSON with pretty formatting
+        with open(validated_path, "w", encoding="utf-8") as f:
+            json.dump(errors, f, indent=4, default=str)
 
     def log_error(
         self,
         exception: Exception,
         context: Optional[str] = None,
-        extra_data: Optional[DictFormat] = None
+        path: Optional[PathLike] = None,
+        use_script_dir: bool = True
     ) -> None:
         """
-        Log an error to JSON file with full details.
+        Save error to JSON file, automatically in script's directory.
 
         Args:
-            exception: The exception object that was raised.
-            context: Optional context string (e.g., "data_processing", "api_call").
-            extra_data: Optional dictionary with additional debugging info.
+            exception: The exception to log
+            context: Optional context string (e.g., "data_loading", "api_call")
+            path: Optional custom path (default: uses default_path from __init__)
+            use_script_dir: If True, saves to caller's script directory (default: True)
 
         Example:
+            >>> # In your script: my-project/src/process.py
+            >>> error_logger = ErrorLogger()
+            >>> 
             >>> try:
-            ...     result = 1 / 0
+            ...     process_data()
             ... except Exception as e:
-            ...     error_logger.log_error(e, context="calculation", extra_data={"input": 0})
+            ...     error_logger.log_error(e, context="processing")
+            >>> 
+            >>> # Saves to: my-project/src/logs/errors.json
+            >>> # (script's directory, not current working directory!)
         """
-        error_entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "error_type": type(exception).__name__,
-            "error_message": str(exception),
-            "context": context or "unknown",
-            "traceback": self._get_traceback_string(exception)
-        }
+        # Determine save path
+        error_path = Path(path) if path else self.default_path
 
-        if extra_data:
-            error_entry["extra_data"] = extra_data
+        # Save to script's directory if requested
+        if use_script_dir:
+            script_dir = self._get_script_dir()
+            error_path = script_dir / error_path
 
         # Read existing errors
-        errors = self._read_errors()
+        existing_errors = self._read_errors(error_path)
 
-        # Add new error
-        errors.append(error_entry)
+        # Create new error entry
+        error_entry: JsonFormat = {
+            "timestamp": datetime.now().isoformat(),
+            "type": type(exception).__name__,
+            "message": str(exception),
+            "context": context or "unspecified",
+            "traceback": self._get_traceback_string(exception),
+        }
+
+        # Add to list
+        existing_errors.append(error_entry)
 
         # Rotate if exceeds max entries (keep most recent)
-        if len(errors) > self.max_entries:
-            errors = errors[-self.max_entries:]
+        if len(existing_errors) > self.max_entries:
+            existing_errors = existing_errors[-self.max_entries:]
 
         # Write back to file
-        self._write_errors(errors)
+        self._write_errors(existing_errors, error_path)
+
+    def clear_errors(self, path: Optional[PathLike] = None) -> None:
+        """
+        Clear all errors from the log file.
+
+        Args:
+            path: Optional custom path (default: uses default_path)
+        """
+        error_path = Path(path) if path else self.default_path
+
+        if error_path.exists():
+            error_path.unlink()
+
+    def get_errors(
+        self,
+        path: Optional[PathLike] = None,
+        limit: Optional[int] = None
+    ) -> List[JsonFormat]:
+        """
+        Retrieve errors from log file.
+
+        Args:
+            path: Optional custom path (default: uses default_path)
+            limit: Optional limit on number of errors to return (most recent first)
+
+        Returns:
+            List of error entries
+        """
+        error_path = Path(path) if path else self.default_path
+        errors = self._read_errors(error_path)
+
+        if limit:
+            return errors[-limit:]
+
+        return errors
 
     def _get_traceback_string(self, exception: Exception) -> str:
         """Extract traceback as string from exception."""
@@ -160,23 +283,6 @@ class ErrorLogger:
         return ''.join(traceback.format_exception(
             type(exception), exception, exception.__traceback__
         ))
-
-    def get_recent_errors(self, n: int = 10) -> List[DictFormat]:
-        """
-        Retrieve the N most recent errors.
-
-        Args:
-            n: Number of recent errors to retrieve.
-
-        Returns:
-            List of error dictionaries, most recent first.
-        """
-        errors = self._read_errors()
-        return errors[-n:][::-1]  # Reverse to show most recent first
-
-    def clear_errors(self) -> None:
-        """Clear all logged errors."""
-        self._write_errors([])
 
 
 # ============================================================================
@@ -203,14 +309,15 @@ class Logger:
     def __init__(
         self,
         level: int = logging.WARNING,
-        error_log_path: Optional[PathLike] = None
+        error_log_path: Optional[PathLike] = None,
     ) -> None:
         """
         Initialize the logger.
 
         Args:
             level: Logging level (logging.INFO, logging.DEBUG, etc.).
-            error_log_path: Optional path for JSON error logging. If None, uses default.
+            error_log_path: Optional path for JSON error logging. 
+            If None, uses default.
         """
         self.logger = logging.getLogger("haashi_pkg")
         self.logger.setLevel(level)
@@ -224,7 +331,7 @@ class Logger:
 
         # Initialize error logger for JSON persistence
         self.log_path = error_log_path or "logs/errors.json"
-        self.error_logger = ErrorLogger(self.log_path)
+        self.error_logger = ErrorLogger(default_path=self.log_path)
 
     def info(self, message: Any) -> None:
         """
@@ -256,8 +363,10 @@ class Logger:
     def error(
         self,
         message: Any | None = None,
+        path: Optional[PathLike] = None,
         exception: Optional[Exception] = None,
         save_to_json: bool = False,
+        use_script_dir: bool = True,
         context: Optional[str] = None
     ) -> None:
         """
@@ -276,22 +385,32 @@ class Logger:
             ...     logger.error("Operation failed", exception=e, save_to_json=True, context="data_load")
         """
 
-        message = (
-            str(message)
-            if message
-            else
-            f"Oops - something went wrong! See {self.log_path} for details."
-        )
+        # Determine error log path
+        error_path = path or self.log_path
 
-        self.logger.error(str(message))
+        # Build error message
+        if message:
+            error_message = str(message)
+        else:
+            error_message = f"Error occurred! See {error_path} for details." if save_to_json else "Error occurred!"
 
+        # Log to console
+        self.logger.error(error_message)
+
+        # Save to JSON if requested
         if save_to_json and exception:
-            self.error_logger.log_error(exception, context=context)
+            self.error_logger.log_error(
+                exception,
+                context=context,
+                path=error_path,
+                use_script_dir=use_script_dir
+            )
 
 
 # ============================================================================
 # FILE OPERATIONS
 # ============================================================================
+
 
 class FileHandler:
     """
@@ -316,6 +435,229 @@ class FileHandler:
             logger: Optional Logger instance for logging operations.
         """
         self.logger = logger or Logger()
+
+    def get_parent_path(
+        self,
+        levels_up: int = 1,
+        start_path: Optional[PathLike] = None
+    ) -> Path:
+        """
+        Get path to parent directory N levels up from CALLER's script location.
+
+        Uses inspect to find where YOUR script is located, not utils.py!
+        Returns Path object so you can use with ANY save method.
+
+        Args:
+            levels_up: Number of parent levels to navigate up (default: 1)
+            start_path: Starting point (default: caller's script directory)
+
+        Returns:
+            Path object pointing to parent directory
+
+        Raises:
+            ValueError: If levels_up is negative
+
+        Example:
+            >>> # Your script: my-project/src/scripts/process.py
+            >>> 
+            >>> handler = FileHandler()
+            >>> 
+            >>> # Get my-project/ (2 levels up: scripts → src → my-project)
+            >>> project_dir = handler.get_parent_path(levels_up=2)
+            >>> print(project_dir)
+            /home/user/my-project
+            >>> 
+            >>> # Use with FileHandler
+            >>> handler.save_json(data, project_dir / "output.json")
+            >>> 
+            >>> # Use with DataSaver
+            >>> from haashi_pkg.data_engine import DataSaver
+            >>> saver = DataSaver()
+            >>> saver.save_csv(df, project_dir / "data.csv")
+        """
+        if levels_up < 0:
+            raise ValueError(
+                f"levels_up must be non-negative, got {levels_up}")
+
+        if start_path is None:
+            # Get the CALLER's file location using inspect
+            frame = inspect.currentframe()
+            if frame and frame.f_back:
+                caller_frame = frame.f_back
+                caller_file = caller_frame.f_globals.get('__file__')
+
+                if caller_file:
+                    current = Path(caller_file).resolve().parent
+                else:
+                    # Fallback to current working directory
+                    current = Path.cwd()
+                    self.logger.debug(
+                        "Could not detect caller file, using cwd")
+            else:
+                current = Path.cwd()
+                self.logger.debug(
+                    "Could not access caller frame, using cwd")
+        else:
+            current = Path(start_path).resolve()
+
+        # Navigate up N levels
+        for _ in range(levels_up):
+            current = current.parent
+
+        self.logger.debug(f"Navigated up {levels_up} levels to: {current}")
+        return current
+
+    def get_ancestor_by_name(
+        self,
+        folder_name: str,
+        start_path: Optional[PathLike] = None,
+        max_levels: int = 10
+    ) -> Optional[Path]:
+        """
+        Find ancestor directory by folder name, starting from CALLER's location.
+
+        Uses inspect to find where YOUR script is located, then walks up
+        the directory tree looking for a folder with the specified name.
+
+        More stable than counting levels - finds folder by exact name.
+        Works even if project structure changes!
+
+        Args:
+            folder_name: Name of ancestor folder to find (case-sensitive)
+            start_path: Starting point (default: caller's script directory)
+            max_levels: Maximum levels to search upward (default: 10)
+
+        Returns:
+            Path to named ancestor folder, or None if not found within max_levels
+
+        Example:
+            >>> # Your script: my-project/src/modules/analysis.py
+            >>> 
+            >>> handler = FileHandler()
+            >>> 
+            >>> # Find "my-project" folder by name
+            >>> # Starts from analysis.py's location, walks up until found
+            >>> project_root = handler.get_ancestor_by_name("my-project")
+            >>> print(project_root)
+            /home/user/my-project
+            >>> 
+            >>> # Use with any save method
+            >>> if project_root:
+            ...     handler.save_json(data, project_root / "output.json")
+            ...     # Saves to: my-project/output.json
+            >>> 
+            >>> # Works even if structure changes!
+            >>> # Old: my-project/src/modules/analysis.py
+            >>> # New: my-project/lib/src/modules/analysis.py
+            >>> # Still finds my-project/ correctly! 
+            >>> 
+            >>> # Use with DataSaver
+            >>> from haashi_pkg.data_engine import DataSaver
+            >>> saver = DataSaver()
+            >>> if project_root:
+            ...     saver.save_csv(df, project_root / "results.csv")
+        """
+        if start_path is None:
+            # Get the CALLER's file location using inspect
+            frame = inspect.currentframe()
+            if frame and frame.f_back:
+                caller_frame = frame.f_back
+                caller_file = caller_frame.f_globals.get('__file__')
+
+                if caller_file:
+                    current = Path(caller_file).resolve().parent
+                    self.logger.debug(
+                        f"Starting search from caller's location: {current}")
+                else:
+                    # Fallback to current working directory
+                    current = Path.cwd()
+                    self.logger.debug(
+                        "Could not detect caller file, starting from cwd")
+            else:
+                current = Path.cwd()
+                self.logger.debug(
+                    "Could not access caller frame, starting from cwd")
+        else:
+            current = Path(start_path).resolve()
+
+        levels_checked = 0
+
+        # Walk up directory tree
+        while levels_checked < max_levels:
+            # Check if current folder matches target name
+            if current.name == folder_name:
+                self.logger.debug(
+                    f"Found ancestor '{folder_name}' at: {current} "
+                    f"({levels_checked} levels up from caller)"
+                )
+                return current
+
+            # Move to parent
+            parent = current.parent
+
+            # Check if reached filesystem root
+            if parent == current:
+                self.logger.warning(
+                    f"Reached filesystem root without finding '{folder_name}'"
+                )
+                return None
+
+            current = parent
+            levels_checked += 1
+
+        # Max levels reached without finding folder
+        self.logger.warning(
+            f"Folder '{folder_name}' not found within {max_levels} levels up from caller"
+        )
+        return None
+
+    def get_script_dir(self) -> Path:
+        """
+        Get the directory where the executed script is located.
+
+        Returns the directory of the main Python script that was run,
+        NOT the current working directory. This ensures files are saved
+        with the script regardless of where the command is executed from.
+
+        Returns:
+            Path: Directory containing the executed script
+
+        Example:
+            >>> # Script location: /home/user/project/process.py
+            >>> handler = FileHandler()
+            >>> script_dir = handler.get_script_dir()
+            >>> print(script_dir)
+            /home/user/project
+            >>> 
+            >>> # Save file in script's directory
+            >>> log_path = script_dir / "logs/output.json"
+            >>> handler.save_json(data, log_path)
+            >>> # Saves to: /home/user/project/logs/output.json
+            >>> 
+            >>> # Works the same regardless of where you run from:
+            >>> # Run from /home/user/project → saves to /home/user/project/logs/
+            >>> # Run from /home/user → saves to /home/user/project/logs/
+            >>> # Run from anywhere → saves to /home/user/project/logs/
+
+        Note:
+            Falls back to current working directory if main script
+            cannot be detected (e.g., in interactive Python sessions).
+        """
+
+        # Get the main script file that was executed
+        if hasattr(sys.modules['__main__'], '__file__'):
+            main_file = sys.modules['__main__'].__file__
+            if main_file:
+                script_dir = Path(main_file).resolve().parent
+                self.logger.debug(f"Script directory detected: {script_dir}")
+                return script_dir
+
+        # Fallback to current working directory
+        fallback = Path.cwd()
+        self.logger.warning(
+            "Could not detect main script location, using current directory"
+        )
+        return fallback
 
     def ensure_writable_path(self, path: PathLike) -> Path:
         """
@@ -364,7 +706,7 @@ class FileHandler:
 
     def save_json(
         self,
-        data: DictFormat,
+        data: JsonFormat,
         path: PathLike,
         mode: str = "w",
         indent: int = 4
@@ -390,7 +732,7 @@ class FileHandler:
             raise FileOperationError(
                 f"Failed to save JSON to {path}: {e}") from e
 
-    def read_json(self, path: PathLike) -> DictFormat:
+    def read_json(self, path: PathLike) -> JsonFormat:
         """
         Read JSON file into dictionary.
 
@@ -621,7 +963,7 @@ class Colors:
     Usage:
         >>> print(f"{Colors.GREEN}Success!{Colors.RESET}")
         >>> print(f"{Colors.BOLD}{Colors.BLUE}Important{Colors.RESET}")
-        >>> print(Colors.red("Error message"))
+        >>> print(Colors.error("Error!"))
     """
 
     # Reset
@@ -981,12 +1323,12 @@ class Utility:
         return self._file_handler.ensure_readable_file(path)
 
     def save_json(
-        self, data: DictFormat, path: PathLike, operation: str = "w"
+        self, data: JsonFormat, path: PathLike, operation: str = "w"
     ) -> None:
         """Save dictionary to JSON file."""
         self._file_handler.save_json(data, path, mode=operation)
 
-    def read_json(self, path: PathLike) -> DictFormat:
+    def read_json(self, path: PathLike) -> JsonFormat:
         """Read JSON file."""
         return self._file_handler.read_json(path)
 

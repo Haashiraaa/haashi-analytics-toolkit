@@ -1,3 +1,5 @@
+
+
 # __init__.py
 """
 Data Engine Package
@@ -64,6 +66,10 @@ from haashi_pkg.data_engine.data_engine import (
     DataTypeError,
     FileLoadError,
     FileSaveError,
+
+    # Aliases
+    DataFrame,
+    Series,
 )
 
 # Public API bindings
@@ -94,6 +100,10 @@ __all__ = [
     'DataTypeError',
     'FileLoadError',
     'FileSaveError',
+
+    # Aliases
+    'DataFrame',
+    'Series',
 ]
 
-__version__ = '1.2.0'
+__version__ = '1.3.0'

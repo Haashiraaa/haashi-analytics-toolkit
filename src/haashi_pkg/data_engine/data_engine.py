@@ -49,7 +49,6 @@ import logging
 import pandas as pd
 import json
 
-from pandas import DataFrame, Series
 from pathlib import Path
 from typing import (
     List,
@@ -63,6 +62,7 @@ from typing import (
 )
 
 from haashi_pkg.utility.utils import Logger, FileHandler
+
 
 # =========================
 # Global pandas config
@@ -88,10 +88,13 @@ DataLike = Union[
 ColumnLike = Optional[List[str]]
 IndexLike = Optional[List[Any]]
 
+DataFrame = pd.DataFrame
+Series = pd.Series
 
 # =========================
 # CUSTOM EXCEPTIONS
 # =========================
+
 
 class DataEngineError(Exception):
     """Base exception class for all Data Engine errors.
@@ -1395,7 +1398,7 @@ class DataLoader:
 
             self.logger.debug(f"Loading {len(paths)} CSV files")
 
-            dfs = []
+            dfs: List[DataFrame] = []
             for path in paths:
                 df = pd.read_csv(
                     path,
@@ -1640,7 +1643,7 @@ class DataLoader:
 
             self.logger.debug(f"Loading {len(paths)} Parquet files")
 
-            dfs = []
+            dfs: List[DataFrame] = []
             for path in paths:
                 df = pd.read_parquet(path, engine="pyarrow")
                 dfs.append(df)
@@ -1800,7 +1803,7 @@ class DataSaver:
 
             df.to_csv(validated_path, index=False)
 
-            self.logger.info(f"Saved CSV: {validated_path} ({len(df)} rows)")
+            self.logger.debug(f"Saved CSV: {validated_path} ({len(df)} rows)")
         except FileSaveError:
             raise
         except Exception as e:
@@ -1927,7 +1930,7 @@ class DataFrameFactory:
         data: DataLike,
         columns: ColumnLike = None,
         index: IndexLike = None
-    ) -> pd.DataFrame:
+    ) -> DataFrame:
         """
         Create pandas DataFrame from various data structures
 
@@ -1965,7 +1968,7 @@ class DataFrameFactory:
         data: Union[List[Any], Dict[Any, Any]],
         index: IndexLike = None,
         name: Optional[str] = None
-    ) -> pd.Series:
+    ) -> Series:
         """
         Create pandas Series from list or dictionary
 
@@ -1996,7 +1999,7 @@ class DataFrameFactory:
     def from_records(
         records: List[Dict[Any, Any]],
         columns: ColumnLike = None
-    ) -> pd.DataFrame:
+    ) -> DataFrame:
         """
         Create DataFrame from list of dictionaries (records)
 
@@ -2020,7 +2023,7 @@ class DataFrameFactory:
         return df
 
     @staticmethod
-    def empty_dataframe(columns: List[str]) -> pd.DataFrame:
+    def empty_dataframe(columns: List[str]) -> DataFrame:
         """
         Create empty DataFrame with specified columns
 

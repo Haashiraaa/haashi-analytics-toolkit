@@ -9,12 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [1.3.0] - 2025-03-04
 
-### Planned
-- Memory profiling utilities
-- Benchmark decorators for automatic timing
-- Database connection benchmarking
+### Added
+- **Path Locator Methods**: Dynamic path resolution for script-relative file saving
+  - `ErrorLogger.get_script_dir()`: Detect script location regardless of execution directory
+  - `FileHandler.get_script_dir()`: Same functionality for file operations
+  - `FileHandler.get_parent_path()`: Get parent directory of any path
+  - `FileHandler.get_ancestor_by_name()`: Get ancestor directories up to specified depth
+  - Ensures logs and data files stay with scripts in production
+
+### Changed
+- **Pandas Import Structure**: Consolidated imports for cleaner dependencies
+  - Removed duplicate imports of `DataFrame` and `Series`
+  - Consolidated to `import pandas as pd`
+  - Added module-level aliases: `DataFrame = pd.DataFrame`, `Series = pd.Series`
+  - Simplifies imports throughout codebase
+
+### Improved
+- Added type hints to `ErrorLogger` class methods
+- Added type hints to `FileHandler` class methods
+- Improved type safety across utility modules
+- Code cleanup and organization improvements
+- Better method signatures and documentation
+
+### Fixed
+- Import redundancies in `data_engine` module
+- Type annotation inconsistencies
+
 
 ---
 
