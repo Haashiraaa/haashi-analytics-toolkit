@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0] - 2025-03-05
+
+### Added
+- **DataSaver.save_excel()**: New method for exporting DataFrames to Excel (.xlsx) files
+  - Full documentation with usage examples
+  - Supports pandas DataFrame to Excel conversion
+  
+- **ScreenUtil.space()**: New method for generating formatted spacing
+  - Customizable space count for terminal output
+  - Useful for formatted console displays
+
+### Fixed
+- Removed redundant `sys` import in ErrorLogger class
+  - sys was already imported at module level
+  - Cleaner import structure
+
+### Technical Details
+This release adds Excel export capability to the DataSaver class. The space()
+method improves terminal output formatting capabilities.
+
+
+___
+
+
 ## [1.3.0] - 2025-03-04
 
 ### Added

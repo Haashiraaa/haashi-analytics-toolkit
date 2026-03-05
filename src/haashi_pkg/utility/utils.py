@@ -134,7 +134,6 @@ class ErrorLogger:
             Falls back to current working directory if main script
             cannot be detected (e.g., in interactive Python sessions).
         """
-        import sys
 
         # Get the main script file that was executed
         if hasattr(sys.modules['__main__'], '__file__'):
@@ -954,6 +953,22 @@ class ScreenUtil:
                 formatted.append(wrapper.fill(line))
 
         return "\n".join(formatted)
+
+    @staticmethod
+    def space(lines: int = 1) -> None:
+        """
+        Print newlines.
+
+        Args:
+            lines: Number of newlines to print.
+
+        Example:
+            >>> ScreenUtil.space(3)
+            >>> # Output:
+            >>> # 
+            >>> #
+        """
+        print("\n" * lines)
 
 
 class Colors:

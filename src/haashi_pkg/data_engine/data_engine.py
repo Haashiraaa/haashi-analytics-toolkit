@@ -1813,6 +1813,57 @@ class DataSaver:
             ) from e
 
     # ========================
+    # SAVE TO EXCEL
+    # ========================
+
+    def save_excel(
+        self,
+        df: DataFrame,
+        path: Optional[str] = None,
+        sheet_name: str = "Sheet1",
+        index: bool = False
+    ) -> None:
+        """
+        Save a DataFrame as an Excel file.
+
+        Args:
+            df: DataFrame to save
+            path: Output file path. Uses default if None. Must end with '.xlsx'.
+            sheet_name: Name of the Excel sheet (default: "Sheet1")
+            index: Whether to include the index column (default: False)
+
+        Raises:
+            FileSaveError: If path is invalid or save operation fails
+
+        Example:
+            >>> saver = DataSaver(logger=logger, file_handler=file_handler)
+            >>> saver.save_excel(df, path="output.xlsx")
+
+            >>> # With custom sheet name
+            >>> saver.save_excel(df, path="report.xlsx", sheet_name="Sales Data")
+
+            >>> # With default path
+            >>> saver = DataSaver(save_path="default.xlsx", logger=logger, file_handler=file_handler)
+            >>> saver.save_excel(df)  # Saves to 'default.xlsx'
+        """
+        try:
+            validated_path = self.validate_save_path(path, ".xlsx")
+
+            self.logger.debug(f"Saving Excel to: {validated_path}")
+
+            df.to_excel(validated_path, sheet_name=sheet_name, index=index)
+
+            self.logger.debug(
+                f"Saved Excel: {validated_path} ({len(df)} rows)")
+        except FileSaveError:
+            raise
+        except Exception as e:
+            raise FileSaveError(
+                f"Failed to save Excel: {str(e)}",
+                path=path or self.save_path
+            ) from e
+
+    # ========================
     # SAVE TO PARQUET
     # ========================
 
