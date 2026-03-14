@@ -70,11 +70,15 @@ from haashi_pkg.data_engine.data_engine import (
     # Aliases
     DataFrame,
     Series,
+
+    # Variables
+    pd,
 )
 
 # Public API bindings
 create_dataframe = DataFrameFactory.create_dataframe
 create_series = DataFrameFactory.create_series
+pd = pd
 
 # For backward compatibility, also expose DataEngine as alias to DataAnalyzer
 # (Users importing from __init__ won't get deprecation warning)
@@ -104,6 +108,9 @@ __all__ = [
     # Aliases
     'DataFrame',
     'Series',
+
+    # Variables
+    'pd',
 ]
 
 __version__ = '1.4.0'

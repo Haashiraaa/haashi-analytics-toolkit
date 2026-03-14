@@ -90,6 +90,7 @@ IndexLike = Optional[List[Any]]
 
 DataFrame = pd.DataFrame
 Series = pd.Series
+pd = pd
 
 # =========================
 # CUSTOM EXCEPTIONS
@@ -1237,7 +1238,7 @@ class DataLoader:
             file_handler: Optional FileHandler instance. If None, creates default
         """
         self.file_paths: List[str] = list(file_paths)
-        self.logger = logger or Logger(level=logging.DEBUG)
+        self.logger = logger or Logger(level=logging.INFO)
         self.file_handler = file_handler or FileHandler(logger=self.logger)
 
     # ==========================
@@ -1593,7 +1594,7 @@ class DataLoader:
 
             df = pd.read_parquet(path, engine="pyarrow")
 
-            self.logger.info(
+            self.logger.debug(
                 f"Loaded Parquet: {path} ({len(df)} rows, {len(df.columns)} columns)"
             )
 
@@ -1901,7 +1902,7 @@ class DataSaver:
 
             df.to_parquet(validated_path, index=False)
 
-            self.logger.info(
+            self.logger.debug(
                 f"Saved Parquet: {validated_path} ({len(df)} rows)"
             )
         except FileSaveError:
@@ -1954,7 +1955,7 @@ class DataSaver:
                 index=False
             )
 
-            self.logger.info(
+            self.logger.debug(
                 f"Saved compressed Parquet: {validated_path} ({len(df)} rows)"
             )
         except FileSaveError:
