@@ -7,8 +7,11 @@
 
 import timeit
 import logging
+import os
+from contextlib import (
+    contextmanager, redirect_stdout, redirect_stderr, nullcontext
+)
 from typing import Callable, Any, Optional
-
 from haashi_pkg.utility import Logger
 from .exceptions import BenchmarkError, InvalidFunctionError
 
@@ -33,7 +36,7 @@ class Benchmark:
         Function took 0.0234s on average
     """
 
-    def __init__(self, logger: Optional[Logger] = None):
+    def __init__(self, logger: Optional[Logger] = None) -> None:
         """
         Initialize Benchmark with optional logger.
 
@@ -42,10 +45,57 @@ class Benchmark:
         """
         self.logger = logger or Logger(level=logging.INFO)
 
+    @contextmanager
+    def _suppress_output(self):
+        with open(os.devnull, "w") as null:
+            with redirect_stdout(null), redirect_stderr(null):
+                logging.disable(logging.CRITICAL)
+                try:
+                    yield
+                finally:
+                    logging.disable(logging.NOTSET)
+
+    def _warmup(
+        self,
+        func: Optional[Callable[[], Any]],
+        times: int = 3,
+        suppress_output: bool = True,
+    ) -> None:
+        """
+        Warm up a function by running it multiple times.
+
+        This is useful for ensuring the function is optimized and ready for benchmarking.
+
+        Args:
+            func: Callable function to warm up (must take no arguments)
+            times: Number of times to run the function (default: 3)
+
+        """
+        # Validate inputs
+        if times < 1:
+            raise ValueError(f"times must be at least 1, got {times}")
+
+        if not callable(func):
+            raise InvalidFunctionError(
+                f"Expected callable function, got {type(func).__name__}"
+            )
+
+        self.logger.debug(f"Warming up function {times} times...")
+
+        ctx = self._suppress_output() if suppress_output else nullcontext()
+        with ctx:
+            for _ in range(times):
+                func()
+
+        self.logger.debug("Warmup complete.")
+
     def measure_time(
         self,
-        func: Callable[[], Any],
-        run_times: int = 5
+        func: Optional[Callable[[], Any]],
+        warmup_times: int = 3,
+        run_times: int = 5,
+        repeat_times: int = 1,
+        suppress_output: bool = True,
     ) -> float:
         """
         Measure average execution time of a function.
@@ -84,6 +134,9 @@ class Benchmark:
         # Validate inputs
         if run_times < 1:
             raise ValueError(f"run_times must be at least 1, got {run_times}")
+        if repeat_times < 1:
+            raise ValueError(
+                f"repeat_times must be at least 1, got {repeat_times}")
 
         if not callable(func):
             raise InvalidFunctionError(
@@ -91,13 +144,23 @@ class Benchmark:
             )
 
         try:
+
+            # Warm up the function
+            self._warmup(
+                func, times=warmup_times, suppress_output=suppress_output)
+
             self.logger.debug(f"Running benchmark {run_times} times...")
 
             # Use timeit for accurate timing
-            total_time = timeit.timeit(func, number=run_times)
-            average_time = total_time / run_times
 
-            self.logger.info(
+            ctx = self._suppress_output() if suppress_output else nullcontext()
+            with ctx:
+                times = timeit.repeat(
+                    func, number=run_times, repeat=repeat_times)
+
+            average_time = min(times) / run_times
+
+            self.logger.debug(
                 f"Average execution time: {average_time:.4f} seconds")
 
             return average_time
@@ -110,4 +173,3 @@ class Benchmark:
             error_msg = f"Failed to benchmark function: {str(e)}"
             self.logger.error(error_msg)
             raise BenchmarkError(error_msg) from e
-

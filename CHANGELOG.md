@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.5.0] - 2026-03-16
+
+### Added
+- Warmup support in Benchmark for more accurate timing results
+- Enhanced benchmark internals for improved stability
+
+### Changed
+- Minor internal refinements to benchmark reporting
+
+
+---
+
 ## [1.4.0] - 2025-03-05
 
 ### Added
