@@ -968,7 +968,7 @@ class ScreenUtil:
             >>> # 
             >>> #
         """
-        print("\n" * lines)
+        print("\n" * lines, end="")
 
 
 class Colors:
