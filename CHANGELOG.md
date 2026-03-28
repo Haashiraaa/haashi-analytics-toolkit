@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.6.0] - 2026-03-28
+
+### Added
+- New string_format parameter to get_current_time utility.
+- Support for returning datetime objects alongside traditional str output.
+- Type hint update: get_current_time now returns Union[str, datetime].
+
+### Changed
+- Internal refactor of get_current_time for better date vs. datetime handling.
+- Optimized formatting logic into a single internal variable.
+
+
+---
+
 ## [v1.5.0] - 2026-03-16
 
 ### Added
