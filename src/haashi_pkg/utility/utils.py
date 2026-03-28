@@ -1088,8 +1088,9 @@ class DateTimeUtil:
     @staticmethod
     def get_current_time(
         utc_offset_hours: int = 0,
+        string_format: bool = True,
         only_date: bool = True
-    ) -> str:
+    ) -> Union[str, datetime]:
         """
         Get current time with optional UTC offset.
 
@@ -1105,14 +1106,16 @@ class DateTimeUtil:
             >>> DateTimeUtil.get_current_time(utc_offset_hours=1, only_date=False)
             '2025-02-04 15:30:45'
         """
-        current_time = (
-            datetime.now(timezone.utc) + timedelta(hours=utc_offset_hours)
-        )
+        
+        format = "%Y-%m-%d %H:%M:%S"
+        if only_date and string_format:
+            format = "%Y-%m-%d"
 
-        if only_date:
-            return current_time.strftime("%Y-%m-%d")
+        current_time = (datetime.now(timezone.utc) + timedelta(hours=utc_offset_hours))
 
-        return current_time.strftime("%Y-%m-%d %H:%M:%S")
+        return current_time.strftime(format) if string_format else current_time
+
+        
 
 
 # ============================================================================
