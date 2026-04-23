@@ -361,7 +361,7 @@ class Logger:
 
     def error(
         self,
-        message: Any | None = None,
+        message: Any | None = "Error occurred!",
         path: Optional[PathLike] = None,
         exception: Optional[Exception] = None,
         save_to_json: bool = False,
@@ -387,14 +387,7 @@ class Logger:
         # Determine error log path
         error_path = path or self.log_path
 
-        # Build error message
-        if message:
-            error_message = str(message)
-        else:
-            error_message = f"Error occurred! See {error_path} for details." if save_to_json else "Error occurred!"
-
-        # Log to console
-        self.logger.error(error_message)
+        error_message = str(message)
 
         # Save to JSON if requested
         if save_to_json and exception:
@@ -404,6 +397,10 @@ class Logger:
                 path=error_path,
                 use_script_dir=use_script_dir
             )
+
+            error_message = str(message) + f"\nSee {error_path} for details"
+
+        self.logger.error(error_message)
 
 
 # ============================================================================
@@ -1106,16 +1103,15 @@ class DateTimeUtil:
             >>> DateTimeUtil.get_current_time(utc_offset_hours=1, only_date=False)
             '2025-02-04 15:30:45'
         """
-        
+
         format = "%Y-%m-%d %H:%M:%S"
         if only_date and string_format:
             format = "%Y-%m-%d"
 
-        current_time = (datetime.now(timezone.utc) + timedelta(hours=utc_offset_hours))
+        current_time = (datetime.now(timezone.utc) +
+                        timedelta(hours=utc_offset_hours))
 
         return current_time.strftime(format) if string_format else current_time
-
-        
 
 
 # ============================================================================

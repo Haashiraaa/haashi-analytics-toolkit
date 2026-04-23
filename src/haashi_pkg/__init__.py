@@ -10,7 +10,7 @@ from . import data_engine
 from . import plot_engine
 from . import benchmark
 
-__version__ = "1.5.0"
+__version__ = "1.6.1"
 
 __all__ = [
     'utility',
