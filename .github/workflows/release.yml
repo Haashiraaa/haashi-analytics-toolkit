@@ -26,18 +26,18 @@ jobs:
           VERSION_NUM="${VERSION#v}"
 
           echo "Looking for: $VERSION_NUM"
-          echo "--- CHANGELOG.md headers found ---"
-          grep "^\[" CHANGELOG.md || echo "No headers found!"
+          echo "--- CHANGELOG.md headers ---"
+          grep "^\#\#" CHANGELOG.md || echo "No ## headers found!"
 
           python3 - <<EOF
-          import re, sys
+          import re
 
           version = "$VERSION_NUM"
           with open("CHANGELOG.md", "r") as f:
               content = f.read()
 
-          # Find section for this version
-          pattern = rf'(?m)^\[v?{re.escape(version)}\][^\n]*\n(.*?)(?=^\[v?[0-9]|\Z)'
+          # Match headers like: ## [v1.6.1] - 2026-04-24
+          pattern = rf'(?m)^##\s+\[v?{re.escape(version)}\][^\n]*\n(.*?)(?=^##\s+\[v?[0-9]|\Z)'
           match = re.search(pattern, content, re.DOTALL)
 
           if match:
@@ -48,7 +48,7 @@ jobs:
           else:
               print(f"⚠️ No section found for {version}")
               with open("extracted.md", "w") as f:
-                  f.write(f"See [CHANGELOG.md](./CHANGELOG.md) for full details.")
+                  f.write("See [CHANGELOG.md](./CHANGELOG.md) for full details.")
           EOF
 
           echo "--- Extracted ---"
