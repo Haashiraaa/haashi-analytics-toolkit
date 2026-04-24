@@ -1,5 +1,7 @@
 
 
+
+
 name: Create Release
 
 on:
@@ -27,18 +29,32 @@ jobs:
           VERSION="${{ steps.tag.outputs.VERSION }}"
           VERSION_NUM="${VERSION#v}"
 
-          # Extract everything between this version header and the next
-          awk "/^\[v?${VERSION_NUM}\]/{found=1; next} found && /^\[v?[0-9]+\.[0-9]+/{exit} found{print}" CHANGELOG.md > extracted.md
+          echo "Looking for version: $VERSION_NUM in CHANGELOG.md"
 
-          # Fallback if section not found
+          # Match headers like: [v1.6.1] - 2026-04-24
+          # Extracts everything between this version and the next version header
+          awk "
+            /^\[v?${VERSION_NUM}\]/ { found=1; next }
+            found && /^\[v?[0-9]+\.[0-9]+\.[0-9]+\]/ { exit }
+            found { print }
+          " CHANGELOG.md > extracted.md
+
+          echo "--- Extracted content ---"
+          cat extracted.md
+
+          # Fallback if nothing found
           if [ ! -s extracted.md ]; then
-            echo "See [CHANGELOG.md](./CHANGELOG.md) for details." > extracted.md
+            echo "⚠️ No changelog section found for $VERSION_NUM, using fallback"
+            echo "See [CHANGELOG.md](./CHANGELOG.md) for full details." > extracted.md
           fi
 
           # Build final release body
           echo "## $VERSION" > release_body.md
           echo "" >> release_body.md
           cat extracted.md >> release_body.md
+
+          echo "--- Final release body ---"
+          cat release_body.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
