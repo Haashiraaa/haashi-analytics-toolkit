@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.6.1] - 2026-04-24
+
+### Changed
+- Simplified error handling logic in Logger for more consistent messaging.
+- Default error message set to "Error occurred!".
+- Error messages now include log file path when saving to JSON.
+- Ensured logging occurs after optional JSON save operation.
+- Improved formatting in DateTimeUtil for better readability.
+
+### Fixed
+- Removed inconsistent conditional error message construction.
+
+### Added
+- Added staged_changes.diff artifact for tracking staged modifications.
+
+### Removed
+- Eliminated redundant whitespace and minor formatting issues.
+
+---
+
 ## [v1.6.0] - 2026-03-28
 
 ### Added

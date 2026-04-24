@@ -15,8 +15,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get tag version
+        id: tag
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Extract changelog section
+        run: |
+          VERSION="${{ steps.tag.outputs.VERSION }}"
+          VERSION_NUM="${VERSION#v}"
+
+          # Extract everything between this version header and the next
+          awk "/^\[v?${VERSION_NUM}\]/{found=1; next} found && /^\[v?[0-9]+\.[0-9]+/{exit} found{print}" CHANGELOG.md > extracted.md
+
+          # Fallback if section not found
+          if [ ! -s extracted.md ]; then
+            echo "See [CHANGELOG.md](./CHANGELOG.md) for details." > extracted.md
+          fi
+
+          # Build final release body
+          echo "## $VERSION" > release_body.md
+          echo "" >> release_body.md
+          cat extracted.md >> release_body.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body_path: release_body.md
+          generate_release_notes: false
+
