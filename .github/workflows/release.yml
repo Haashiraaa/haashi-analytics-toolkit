@@ -31,14 +31,13 @@ jobs:
             echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Extract changelog section
+      - name: Extract changelog section and title
+        id: extract
         run: |
           VERSION="${{ steps.tag.outputs.VERSION }}"
           VERSION_NUM="${VERSION#v}"
 
           echo "Looking for: $VERSION_NUM"
-          echo "--- CHANGELOG.md headers ---"
-          grep "^\#\#" CHANGELOG.md || echo "No ## headers found!"
 
           python3 - <<EOF
           import re
@@ -47,25 +46,45 @@ jobs:
           with open("CHANGELOG.md", "r") as f:
               content = f.read()
 
-          # Match headers like: ## [v1.6.1] - 2026-04-24
-          pattern = rf'(?m)^##\s+\[v?{re.escape(version)}\][^\n]*\n(.*?)(?=^##\s+\[v?[0-9]|\Z)'
-          match = re.search(pattern, content, re.DOTALL)
+          # Match: ## [v1.6.1] - 2026-04-24 — Some Title
+          header_pattern = rf'(?m)^##\s+\[v?{re.escape(version)}\][^\n]*'
+          header_match = re.search(header_pattern, content)
 
-          if match:
-              body = match.group(1).strip()
-              print(f"✅ Found changelog section for {version}")
+          # Extract subtitle after the date if present
+          # Handles both — (em dash) and - (hyphen) as separator
+          release_title = f"{version}"
+          if header_match:
+              header = header_match.group(0)
+              subtitle_match = re.search(r'[-—–]\s*\d{4}-\d{2}-\d{2}\s*[-—–]\s*(.+)', header)
+              if subtitle_match:
+                  subtitle = subtitle_match.group(1).strip()
+                  release_title = f"{version} — {subtitle}"
+                  print(f"✅ Found title: {release_title}")
+              else:
+                  print(f"ℹ️ No subtitle found, using version only: {release_title}")
+
+          # Extract body between this version and the next
+          body_pattern = rf'(?m)^##\s+\[v?{re.escape(version)}\][^\n]*\n(.*?)(?=^##\s+\[v?[0-9]|\Z)'
+          body_match = re.search(body_pattern, content, re.DOTALL)
+
+          if body_match:
+              body = body_match.group(1).strip()
+              print(f"✅ Found changelog body for {version}")
               with open("extracted.md", "w") as f:
                   f.write(body)
           else:
-              print(f"⚠️ No section found for {version}")
+              print(f"⚠️ No body found for {version}")
               with open("extracted.md", "w") as f:
                   f.write("See [CHANGELOG.md](./CHANGELOG.md) for full details.")
+
+          with open("release_title.txt", "w") as f:
+              f.write(release_title)
           EOF
 
-          echo "--- Extracted ---"
-          cat extracted.md
+          RELEASE_TITLE=$(cat release_title.txt)
+          echo "RELEASE_TITLE=$RELEASE_TITLE" >> $GITHUB_OUTPUT
 
-          echo "## $VERSION" > release_body.md
+          echo "## $RELEASE_TITLE" > release_body.md
           echo "" >> release_body.md
           cat extracted.md >> release_body.md
 
@@ -76,5 +95,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.VERSION }}
+          name: ${{ steps.extract.outputs.RELEASE_TITLE }}
           body_path: release_body.md
           generate_release_notes: false
