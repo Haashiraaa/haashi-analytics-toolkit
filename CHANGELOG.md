@@ -7,7 +7,49 @@ All notable changes to haashi-analytics-toolkit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
 ---
+
+## [v1.8.0] - 2026-04-28 - QuickPlot & PowerCanvas Dashboard Engine
+
+### Added
+- Introduced `QuickPlot` class in `plot_engine` module for rapid single-method
+  plot creation with built-in dark and light theme support.
+- Added `QuickPlot.line()` — one-call line plots with optional reference lines,
+  markers, legends, and theme-aware styling.
+- Added `QuickPlot.bar()` — one-call bar charts with optional value labels,
+  rotation control, and reference lines.
+- Added `QuickPlot.scatter()` — one-call scatter plots with optional horizontal
+  and vertical reference lines.
+- Added `QuickPlot.pie()` — one-call pie charts with explode, shadow, and
+  custom color support.
+- Introduced `PowerCanvas` class for Power BI-style multi-panel dashboard
+  composition built on top of `PlotEngine`.
+- Added `PowerCanvas.preset_kpi_top()` — preset layout with KPI card row on
+  top and chart panels below.
+- Added `PowerCanvas.preset_split()` — preset layout with wide chart on the
+  left and stacked KPI panels on the right.
+- Added `PowerCanvas.preset_full_grid()` — preset even N×M grid of chart panels.
+- Added `PowerCanvas.create_canvas()` — flexible grid layout with custom
+  height/width ratios and (row, col) tuple panel addressing with col/row span
+  support.
+- Added `PowerCanvas.add_kpi_card()` — KPI cards with value, label, delta
+  indicator, accent bar, and optional sparkline trend chart.
+- Added `PowerCanvas.add_bar()`, `add_line()`, `add_scatter()`, `add_pie()`
+  — themed chart panels for dashboard composition.
+- Added `PowerCanvas.add_stats_panel()` — styled key-value metrics text panel.
+- Added `PowerCanvas.render()` — dashboard finalization, export, and display.
+- Added `docs/plot_engine.md` — full module documentation covering `PlotEngine`,
+  `QuickPlot`, and `PowerCanvas` with examples, parameter references, error
+  reference, and type reference.
+
+### Changed
+- `PlotEngine` now serves as the shared composition engine for both `QuickPlot`
+  and `PowerCanvas`, with no breaking changes to its existing public API.
+
+---
+
+
 ## [v1.6.1] - 2026-04-24 — Improved Logger & Error Handling
 
 ### Changed
