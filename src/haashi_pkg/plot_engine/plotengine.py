@@ -25,7 +25,6 @@ Example:
 from __future__ import annotations
 
 import logging
-import warnings
 from datetime import datetime
 from typing import (
     Tuple,
@@ -36,7 +35,8 @@ from typing import (
     Iterable,
     Sequence,
     Any,
-    List
+    List,
+    cast
 )
 
 
@@ -89,6 +89,8 @@ Kwargs = Dict[str, Union[
     Optional[str], Optional[int],
     Tuple[int, ...], Tuple[float, ...]
 ]]
+
+QuickTheme = Literal["dark", "light"]
 
 
 # ----------------------------
@@ -1450,3 +1452,585 @@ class PlotEngine:
             raise PlotEngineError(
                 f"Failed to save or show figure: {str(e)}"
             ) from e
+
+
+# ----------------------------
+# QUICK PLOT
+# ----------------------------
+
+
+class QuickPlot:
+    """
+    A rapid visualization class built on top of PlotEngine.
+
+    QuickPlot collapses the full PlotEngine workflow — create_figure,
+    draw, decorate, set_background_color, save_or_show — into a single
+    method call per plot type. Plots still look polished with sensible
+    defaults, but you can override anything via keyword arguments.
+
+    Two built-in themes are available:
+    - "dark"  : Dark background, white text, subtle grid (default)
+    - "light" : White background, dark text, gray grid
+
+    Attributes:
+        _engine (PlotEngine): The underlying PlotEngine instance
+        theme (QuickTheme): Active theme ('dark' or 'light')
+
+    Example:
+        >>> qp = QuickPlot(theme="dark")
+
+        >>> # Minimal — just data and a title
+        >>> qp.line(x=[1, 2, 3, 4], y=[10, 15, 13, 17], title="Trend")
+
+        >>> # With more options
+        >>> qp.bar(
+        ...     x=["Jan", "Feb", "Mar"],
+        ...     y=[5000, 7200, 6800],
+        ...     title="Monthly Revenue",
+        ...     ylabel="USD",
+        ...     color="#4ECDC4",
+        ...     value_labels=True,
+        ...     save_path="revenue.png"
+        ... )
+
+        >>> # Scatter with reference line
+        >>> qp.scatter(
+        ...     x=[1, 2, 3, 4, 5],
+        ...     y=[3, 7, 2, 9, 5],
+        ...     title="Distribution",
+        ...     ref_y=5.0,
+        ...     ref_label="Average"
+        ... )
+
+        >>> # Pie chart
+        >>> qp.pie(
+        ...     values=[40, 30, 20, 10],
+        ...     labels=["A", "B", "C", "D"],
+        ...     title="Market Share"
+        ... )
+    """
+
+    # ----------------------------
+    # THEME CONFIGS
+    # ----------------------------
+
+    _THEMES: Dict[str, Dict[str, Union[str, float]]] = {
+        "dark": {
+            "seaborn_style": "darkgrid",
+            "fig_color":     "#1a1a1a",
+            "ax_color":      "#2a2a2a",
+            "grid_color":    "white",
+            "grid_alpha":    0.15,
+            "title_color":   "white",
+            "label_color":   "white",
+            "tick_color":    "white",
+            "default_color": "#4E79A7",
+        },
+        "light": {
+            "seaborn_style": "whitegrid",
+            "fig_color":     "#f5f5f5",
+            "ax_color":      "#ffffff",
+            "grid_color":    "#cccccc",
+            "grid_alpha":    0.6,
+            "title_color":   "#1a1a1a",
+            "label_color":   "#333333",
+            "tick_color":    "#444444",
+            "default_color": "#1f77b4",
+        },
+    }
+
+    def __init__(
+        self,
+        theme: QuickTheme = "dark",
+        logger: Optional[Logger] = None,
+    ) -> None:
+        """
+        Initialize QuickPlot with a theme and an internal PlotEngine.
+
+        Args:
+            theme: Visual theme. Options:
+                - 'dark'  : Dark background, white labels (default)
+                - 'light' : Light background, dark labels
+            logger: Optional Logger instance. If None, PlotEngine creates its own.
+
+        Example:
+            >>> qp = QuickPlot()                   # dark theme
+            >>> qp = QuickPlot(theme="light")      # light theme
+            >>> qp = QuickPlot(theme="dark", logger=my_logger)
+        """
+        if theme not in self._THEMES:
+            raise ValueError(
+                f"Invalid theme '{theme}'. Choose from: {list(self._THEMES)}"
+            )
+
+        self.theme: QuickTheme = theme
+        self._engine: PlotEngine = PlotEngine(logger=logger)
+        self._cfg = self._THEMES[theme]
+
+    # ----------------------------
+    # INTERNAL HELPERS
+    # ----------------------------
+
+    def _seaborn_style(self) -> ThemeType:
+        return self._cfg["seaborn_style"]  # type: ignore[return-value]
+
+    def _apply_background(self, fig: Figure, ax: Axes) -> None:
+        """Apply theme background colors to fig and ax."""
+        self._engine.set_background_color(
+            fig, ax,
+            fig_color=cast(str, self._cfg["fig_color"]),
+            ax_color=cast(str, self._cfg["ax_color"]),
+            grid_color=cast(str, self._cfg["grid_color"]),
+            grid_alpha=cast(float, self._cfg["grid_alpha"]),
+        )
+
+    def _apply_decorate(
+        self,
+        ax: Axes,
+        title: Optional[str],
+        xlabel: Optional[str],
+        ylabel: Optional[str],
+        xlim: Optional[Tuple[float, float]],
+        ylim,
+        title_fontsize: int,
+        label_fontsize: int,
+    ) -> None:
+        """Apply labels and axis settings using theme colors."""
+        self._engine.decorate(
+            ax,
+            title=title,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            title_fontsize=title_fontsize,
+            label_fontsize=label_fontsize,
+            title_color=cast(str, self._cfg["title_color"]),
+            label_color=cast(str, self._cfg["label_color"]),
+            tick_color=cast(str, self._cfg["tick_color"]),
+            xlim=xlim,
+            ylim=ylim,
+        )
+
+    def _finalize(
+        self,
+        fig: Figure,
+        save_path: Optional[str],
+        dpi: int,
+        show: bool,
+        top: float = 0.93,
+        bottom: float = 0.1,
+    ) -> None:
+        """Finalize and optionally save/show the figure."""
+        self._engine.save_or_show(
+            fig,
+            dpi=dpi,
+            save_path=save_path,
+            top=top,
+            bottom=bottom,
+            show=show,
+        )
+
+    # ----------------------------
+    # PUBLIC PLOT METHODS
+    # ----------------------------
+
+    def line(
+        self,
+        x: XData,
+        y: YData,
+        *,
+        title: Optional[str] = None,
+        xlabel: Optional[str] = None,
+        ylabel: Optional[str] = None,
+        color: Optional[str] = None,
+        linewidth: float = 2.5,
+        marker: Optional[str] = "o",
+        markersize: int = 6,
+        label: Optional[str] = None,
+        figsize: Tuple[int, int] = (10, 6),
+        xlim: Optional[Tuple[float, float]] = None,
+        ylim=None,
+        ref_y: Optional[float] = None,
+        ref_label: Optional[str] = None,
+        ref_color: str = "gray",
+        title_fontsize: int = 18,
+        label_fontsize: int = 13,
+        legend: bool = False,
+        save_path: Optional[str] = None,
+        dpi: int = 150,
+        show: bool = False,
+        context: ContextType = "notebook",
+    ) -> None:
+        """
+        Create a quick line plot.
+
+        Args:
+            x: X-axis data (numbers, strings, datetimes, or pandas Series).
+            y: Y-axis numeric data.
+            title: Plot title.
+            xlabel: X-axis label.
+            ylabel: Y-axis label.
+            color: Line color. Defaults to theme's primary color.
+            linewidth: Width of the line. Default is 2.5.
+            marker: Marker style. Default is 'o'. Use None for no markers.
+            markersize: Size of markers. Default is 6.
+            label: Series label (shows in legend if legend=True).
+            figsize: Figure size as (width, height). Default is (10, 6).
+            xlim: X-axis limits as (min, max). None for automatic.
+            ylim: Y-axis limits. (min, max) tuple, "zero", or None.
+            ref_y: Optional horizontal reference line value (e.g. target, mean).
+            ref_label: Label for the reference line (shown in legend).
+            ref_color: Color of the reference line. Default is 'gray'.
+            title_fontsize: Title font size. Default is 18.
+            label_fontsize: Axis label font size. Default is 13.
+            legend: Whether to show a legend. Default is False.
+            save_path: File path to save the figure (e.g. 'plot.png'). None to skip.
+            dpi: Resolution for saved image. Default is 150.
+            show: Whether to display the figure. Default is True.
+            context: Seaborn context ('paper', 'notebook', 'talk', 'poster').
+
+        Example:
+            >>> qp = QuickPlot()
+            >>> qp.line(
+            ...     x=[1, 2, 3, 4, 5],
+            ...     y=[10, 14, 12, 18, 15],
+            ...     title="Weekly Trend",
+            ...     xlabel="Week",
+            ...     ylabel="Value",
+            ...     ref_y=13,
+            ...     ref_label="Average"
+            ... )
+        """
+        clr = color or self._cfg["default_color"]
+
+        fig, ax = self._engine.create_figure(
+            figsize=figsize,
+            seaborn_theme=self._seaborn_style(),
+            seaborn_context=context,
+        )
+        self._apply_background(fig, ax)
+
+        self._engine.draw(
+            ax, x=x, y=y, plot_type="line",
+            color=clr,
+            linewidth=linewidth,
+            marker=marker,
+            markersize=markersize,
+            **({"label": label} if label else {}),
+        )
+
+        if ref_y is not None:
+            self._engine.add_reference_line(
+                ax, y=ref_y, label=ref_label, color=ref_color
+            )
+
+        self._apply_decorate(
+            ax, title=title, xlabel=xlabel, ylabel=ylabel,
+            xlim=xlim, ylim=ylim,
+            title_fontsize=title_fontsize, label_fontsize=label_fontsize,
+        )
+
+        if legend or label or ref_label:
+            self._engine.set_legend(ax, fontsize=12)
+
+        self._finalize(fig, save_path=save_path, dpi=dpi, show=show)
+
+    def bar(
+        self,
+        x: XData,
+        y: YData,
+        *,
+        title: Optional[str] = None,
+        xlabel: Optional[str] = None,
+        ylabel: Optional[str] = None,
+        color: Optional[str] = None,
+        edgecolor: Optional[str] = None,
+        value_labels: bool = False,
+        value_format: str = "{:.0f}",
+        value_color: Optional[str] = None,
+        figsize: Tuple[int, int] = (10, 6),
+        xlim: Optional[Tuple[float, float]] = None,
+        ylim=None,
+        rotation: int = 45,
+        ref_y: Optional[float] = None,
+        ref_label: Optional[str] = None,
+        ref_color: str = "gray",
+        title_fontsize: int = 18,
+        label_fontsize: int = 13,
+        save_path: Optional[str] = None,
+        dpi: int = 150,
+        show: bool = False,
+        context: ContextType = "notebook",
+    ) -> None:
+        """
+        Create a quick bar chart.
+
+        Args:
+            x: Category labels for bars.
+            y: Bar height values (numeric).
+            title: Plot title.
+            xlabel: X-axis label.
+            ylabel: Y-axis label.
+            color: Bar color. Defaults to theme's primary color.
+            edgecolor: Bar edge color. Defaults to theme's ax background color.
+            value_labels: If True, adds value labels on top of bars. Default is False.
+            value_format: Python format string for value labels. Default is '{:.0f}'.
+                          Examples: '${:,.0f}', '{:.1f}%', '{:,.2f}'
+            value_color: Color of value labels. Defaults to theme title color.
+            figsize: Figure size as (width, height). Default is (10, 6).
+            xlim: X-axis limits. None for automatic.
+            ylim: Y-axis limits. (min, max) tuple, "zero", or None.
+            rotation: X tick label rotation in degrees. Default is 45.
+            ref_y: Optional horizontal reference line value.
+            ref_label: Label for the reference line.
+            ref_color: Color of the reference line. Default is 'gray'.
+            title_fontsize: Title font size. Default is 18.
+            label_fontsize: Axis label font size. Default is 13.
+            save_path: File path to save the figure. None to skip.
+            dpi: Resolution for saved image. Default is 150.
+            show: Whether to display the figure. Default is True.
+            context: Seaborn context ('paper', 'notebook', 'talk', 'poster').
+
+        Example:
+            >>> qp = QuickPlot(theme="light")
+            >>> qp.bar(
+            ...     x=["Jan", "Feb", "Mar", "Apr"],
+            ...     y=[5200, 7100, 6300, 8800],
+            ...     title="Monthly Sales",
+            ...     ylabel="Revenue ($)",
+            ...     value_labels=True,
+            ...     value_format="${:,.0f}",
+            ...     save_path="sales.png"
+            ... )
+        """
+        clr = color or self._cfg["default_color"]
+        edge = edgecolor or self._cfg["ax_color"]
+        val_clr = cast(str, value_color or self._cfg["title_color"])
+
+        fig, ax = self._engine.create_figure(
+            figsize=figsize,
+            seaborn_theme=self._seaborn_style(),
+            seaborn_context=context,
+        )
+        self._apply_background(fig, ax)
+
+        self._engine.draw(
+            ax, x=x, y=y, plot_type="bar",
+            color=clr,
+            edgecolor=edge,
+        )
+
+        if value_labels:
+            self._engine.add_value_labels_on_bars(
+                ax,
+                format_string=value_format,
+                color=val_clr,
+                fontsize=11,
+            )
+
+        if ref_y is not None:
+            self._engine.add_reference_line(
+                ax, y=ref_y, label=ref_label, color=ref_color
+            )
+
+        # Rotate x tick labels if needed
+        ax.tick_params(axis='x', rotation=rotation)
+
+        self._apply_decorate(
+            ax, title=title, xlabel=xlabel, ylabel=ylabel,
+            xlim=xlim, ylim=ylim,
+            title_fontsize=title_fontsize, label_fontsize=label_fontsize,
+        )
+
+        if ref_label:
+            self._engine.set_legend(ax, fontsize=12)
+
+        self._finalize(fig, save_path=save_path, dpi=dpi, show=show)
+
+    def scatter(
+        self,
+        x: XData,
+        y: YData,
+        *,
+        title: Optional[str] = None,
+        xlabel: Optional[str] = None,
+        ylabel: Optional[str] = None,
+        color: Optional[str] = None,
+        size: int = 80,
+        alpha: float = 0.75,
+        marker: str = "o",
+        label: Optional[str] = None,
+        figsize: Tuple[int, int] = (10, 6),
+        xlim: Optional[Tuple[float, float]] = None,
+        ylim=None,
+        ref_y: Optional[float] = None,
+        ref_x: Optional[float] = None,
+        ref_label: Optional[str] = None,
+        ref_color: str = "gray",
+        title_fontsize: int = 18,
+        label_fontsize: int = 13,
+        legend: bool = False,
+        save_path: Optional[str] = None,
+        dpi: int = 150,
+        show: bool = False,
+        context: ContextType = "notebook",
+    ) -> None:
+        """
+        Create a quick scatter plot.
+
+        Args:
+            x: X-axis data.
+            y: Y-axis numeric data.
+            title: Plot title.
+            xlabel: X-axis label.
+            ylabel: Y-axis label.
+            color: Marker color. Defaults to theme's primary color.
+            size: Marker size. Default is 80.
+            alpha: Marker transparency (0-1). Default is 0.75.
+            marker: Marker shape. Default is 'o'.
+            label: Series label for legend.
+            figsize: Figure size as (width, height). Default is (10, 6).
+            xlim: X-axis limits. None for automatic.
+            ylim: Y-axis limits. (min, max) tuple, "zero", or None.
+            ref_y: Optional horizontal reference line value.
+            ref_x: Optional vertical reference line value.
+            ref_label: Label for the reference line.
+            ref_color: Color of the reference line. Default is 'gray'.
+            title_fontsize: Title font size. Default is 18.
+            label_fontsize: Axis label font size. Default is 13.
+            legend: Whether to show a legend. Default is False.
+            save_path: File path to save the figure. None to skip.
+            dpi: Resolution for saved image. Default is 150.
+            show: Whether to display the figure. Default is True.
+            context: Seaborn context ('paper', 'notebook', 'talk', 'poster').
+
+        Example:
+            >>> qp = QuickPlot()
+            >>> qp.scatter(
+            ...     x=[1, 2, 3, 4, 5, 6],
+            ...     y=[5, 9, 3, 7, 2, 8],
+            ...     title="Score Distribution",
+            ...     ref_y=5.0,
+            ...     ref_label="Median"
+            ... )
+        """
+        clr = color or self._cfg["default_color"]
+
+        fig, ax = self._engine.create_figure(
+            figsize=figsize,
+            seaborn_theme=self._seaborn_style(),
+            seaborn_context=context,
+        )
+        self._apply_background(fig, ax)
+
+        self._engine.draw(
+            ax, x=x, y=y, plot_type="scatter",
+            color=clr,
+            s=size,
+            alpha=alpha,
+            marker=marker,
+            **({"label": label} if label else {}),
+        )
+
+        if ref_y is not None:
+            self._engine.add_reference_line(
+                ax, y=ref_y, label=ref_label, color=ref_color
+            )
+        if ref_x is not None:
+            self._engine.add_reference_line(
+                ax, x=ref_x, label=ref_label, color=ref_color
+            )
+
+        self._apply_decorate(
+            ax, title=title, xlabel=xlabel, ylabel=ylabel,
+            xlim=xlim, ylim=ylim,
+            title_fontsize=title_fontsize, label_fontsize=label_fontsize,
+        )
+
+        if legend or label or ref_label:
+            self._engine.set_legend(ax, fontsize=12)
+
+        self._finalize(fig, save_path=save_path, dpi=dpi, show=show)
+
+    def pie(
+        self,
+        values: YData,
+        *,
+        labels: Optional[Iterable[str]] = None,
+        title: Optional[str] = None,
+        colors: Optional[Iterable[str]] = None,
+        autopct: str = "%1.1f%%",
+        startangle: int = 140,
+        explode: Optional[Iterable[float]] = None,
+        shadow: bool = False,
+        figsize: Tuple[int, int] = (8, 8),
+        title_fontsize: int = 18,
+        save_path: Optional[str] = None,
+        dpi: int = 150,
+        show: bool = False,
+        context: ContextType = "notebook",
+    ) -> None:
+        """
+        Create a quick pie chart.
+
+        Args:
+            values: Numeric values for each slice.
+            labels: Slice labels. None for no labels.
+            title: Chart title.
+            colors: List of slice colors. Defaults to the engine's colors_01 palette.
+            autopct: Format string for percentage labels. Default is '%1.1f%%'.
+                     Use None to hide percentages.
+            startangle: Starting angle in degrees. Default is 140.
+            explode: Offset for each slice (e.g. [0.1, 0, 0, 0] to pop out first slice).
+                     None for no explosion.
+            shadow: Whether to add a shadow effect. Default is False.
+            figsize: Figure size as (width, height). Default is (8, 8).
+            title_fontsize: Title font size. Default is 18.
+            save_path: File path to save the figure. None to skip.
+            dpi: Resolution for saved image. Default is 150.
+            show: Whether to display the figure. Default is True.
+            context: Seaborn context ('paper', 'notebook', 'talk', 'poster').
+
+        Example:
+            >>> qp = QuickPlot(theme="light")
+            >>> qp.pie(
+            ...     values=[40, 30, 20, 10],
+            ...     labels=["Product A", "Product B", "Product C", "Other"],
+            ...     title="Revenue Breakdown",
+            ...     explode=[0.05, 0, 0, 0]
+            ... )
+        """
+        clrs = colors or self._engine.colors_01
+
+        fig, ax = self._engine.create_figure(
+            figsize=figsize,
+            seaborn_theme=self._seaborn_style(),
+            seaborn_context=context,
+        )
+
+        # For pie, set the figure background only (ax background is irrelevant)
+        fig.patch.set_facecolor(cast(str, self._cfg["fig_color"]))
+        ax.set_facecolor(self._cfg["fig_color"])
+
+        self._engine.draw(
+            ax, x=None, y=values, plot_type="pie",
+            labels=labels,
+            colors=clrs,
+            autopct=autopct,
+            startangle=startangle,
+            **({"explode": explode} if explode is not None else {}),
+            shadow=shadow,
+        )
+
+        if title:
+            ax.set_title(
+                title,
+                fontsize=title_fontsize,
+                color=self._cfg["title_color"],
+                pad=16,
+            )
+
+        # Style the percentage and label text to match theme
+        for text in ax.texts:
+            text.set_color(self._cfg["title_color"])
+
+        self._finalize(fig, save_path=save_path, dpi=dpi, show=show)

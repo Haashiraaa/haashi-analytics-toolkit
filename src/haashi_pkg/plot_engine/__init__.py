@@ -92,6 +92,7 @@ Advanced Example (Custom Grid):
 from haashi_pkg.plot_engine.plotengine import (
     # Main class
     PlotEngine,
+    QuickPlot,
 
     # Exceptions
     PlotEngineError,
@@ -102,6 +103,7 @@ from haashi_pkg.plot_engine.plotengine import (
 
 __all__ = [
     'PlotEngine',
+    'QuickPlot',
     'PlotEngineError',
     'InvalidPlotTypeError',
     'InvalidDataError',
