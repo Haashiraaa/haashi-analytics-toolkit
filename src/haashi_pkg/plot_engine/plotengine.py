@@ -2080,7 +2080,7 @@ class PowerCanvas:
     # THEME CONFIGS
     # ----------------------------
 
-    _THEMES: dict = {
+    _THEMES: Dict[str, Dict[str, Union[str, float, List[str]]]] = {
         "dark": {
             "fig_color":        "#0f0f0f",
             "canvas_color":     "#1a1a1a",
@@ -2132,7 +2132,7 @@ class PowerCanvas:
         title: str = "Dashboard",
         theme: DashTheme = "light",
         figsize: Tuple[int, int] = (20, 12),
-        logger=None,
+        logger: Optional[Logger] = None,
     ) -> None:
         """
         Initialize PowerCanvas.
@@ -2151,11 +2151,13 @@ class PowerCanvas:
                 f"Invalid theme '{theme}'. Choose from: {list(self._THEMES)}"
             )
 
-        self.title:   str = title
-        self.theme:   DashTheme = theme
-        self.figsize: Tuple = figsize
-        self._engine: PlotEngine = PlotEngine(logger=logger)
-        self._cfg:    dict = self._THEMES[theme]
+        self.title = title
+        self.theme = theme
+        self.figsize = figsize
+
+        self.logger = logger or Logger(logging.INFO)
+        self._engine = PlotEngine(logger=self.logger)
+        self._cfg = self._THEMES[theme]
 
         # State
         self._fig:    Optional[Figure] = None
@@ -2169,11 +2171,11 @@ class PowerCanvas:
 
     def _style_panel(self, ax: Axes) -> None:
         """Apply theme styling to a panel axes."""
-        ax.set_facecolor(self._cfg["panel_color"])
+        ax.set_facecolor(cast(str, self._cfg["panel_color"]))
         ax.tick_params(colors=self._cfg["tick_color"])
         ax.grid(color=self._cfg["grid_color"], alpha=self._cfg["grid_alpha"])
         for spine in ax.spines.values():
-            spine.set_edgecolor(self._cfg["panel_edge"])
+            spine.set_edgecolor(cast(str, self._cfg["panel_edge"]))
 
     def _style_chart_ax(
         self,
@@ -2222,7 +2224,7 @@ class PowerCanvas:
 
     def _draw_header(self, fig: Figure, title: str) -> None:
         """Draw the dashboard title header band at the top."""
-        header_ax = fig.add_axes([0, 0.955, 1, 0.045])
+        header_ax = fig.add_axes([0.0, 0.955, 1.0, 0.045])
         header_ax.set_facecolor(self._cfg["header_color"])
         header_ax.axis("off")
         header_ax.text(
@@ -2278,7 +2280,7 @@ class PowerCanvas:
         ] * chart_rows
 
         self._fig = plt.figure(figsize=self.figsize)
-        self._fig.patch.set_facecolor(self._cfg["fig_color"])
+        self._fig.patch.set_facecolor(cast(str, self._cfg["fig_color"]))
 
         gs = gridspec.GridSpec(
             total_rows, cols,
@@ -2297,7 +2299,7 @@ class PowerCanvas:
             col_end = col_start + kpi_col_span
             ax = self._fig.add_subplot(gs[0, col_start:col_end])
             ax.axis("off")
-            ax.set_facecolor(self._cfg["panel_color"])
+            ax.set_facecolor(cast(str, self._cfg["panel_color"]))
             self._register_panel(i, ax)
 
         # Chart panels
@@ -2345,7 +2347,7 @@ class PowerCanvas:
         right_ratio = 1 - left_width_ratio
 
         self._fig = plt.figure(figsize=self.figsize)
-        self._fig.patch.set_facecolor(self._cfg["fig_color"])
+        self._fig.patch.set_facecolor(cast(str, self._cfg["fig_color"]))
 
         # Left panel
         left_ax = self._fig.add_axes(
@@ -2398,7 +2400,7 @@ class PowerCanvas:
             >>> pc.add_pie(2, values=[40,30,20,10], title="Share")
         """
         self._fig = plt.figure(figsize=self.figsize)
-        self._fig.patch.set_facecolor(self._cfg["fig_color"])
+        self._fig.patch.set_facecolor(cast(str, self._cfg["fig_color"]))
 
         gs = gridspec.GridSpec(
             rows, cols,
@@ -2460,7 +2462,7 @@ class PowerCanvas:
             >>> pc.add_bar((1,0), x=cats, y=vals, title="Sales", col_span=2)
         """
         self._fig = plt.figure(figsize=self.figsize)
-        self._fig.patch.set_facecolor(self._cfg["fig_color"])
+        self._fig.patch.set_facecolor(cast(str, self._cfg["fig_color"]))
 
         self._gs = gridspec.GridSpec(
             rows, cols,
@@ -2497,10 +2499,11 @@ class PowerCanvas:
         if key not in self._panels:
             r_slice = slice(row, row + row_span)
             c_slice = slice(col, col + col_span)
+            assert self._fig is not None
             ax = self._fig.add_subplot(self._gs[r_slice, c_slice])
             if kpi:
                 ax.axis("off")
-                ax.set_facecolor(self._cfg["panel_color"])
+                ax.set_facecolor(cast(str, self._cfg["panel_color"]))
             else:
                 self._style_panel(ax)
             self._register_panel(key, ax)
@@ -2519,7 +2522,7 @@ class PowerCanvas:
         value: str,
         delta: Optional[str] = None,
         delta_up: Optional[bool] = None,
-        sparkline_data: Optional[Iterable] = None,
+        sparkline_data: Optional[Iterable[int]] = None,
         icon: Optional[str] = None,
         col_span: int = 1,
         row_span: int = 1,
@@ -2563,7 +2566,7 @@ class PowerCanvas:
             ax = self._get_panel(index)
 
         ax.axis("off")
-        ax.set_facecolor(self._cfg["panel_color"])
+        ax.set_facecolor(cast(str, self._cfg["panel_color"]))
 
         # Draw card background with rounded look
         bg = FancyBboxPatch(
@@ -2723,14 +2726,14 @@ class PowerCanvas:
             self._engine.add_value_labels_on_bars(
                 ax,
                 format_string=value_format,
-                color=self._cfg["label_color"],
+                color=cast(str, self._cfg["label_color"]),
                 fontsize=9,
             )
 
         if ref_y is not None:
             self._engine.add_reference_line(
                 ax, y=ref_y, label=ref_label,
-                color=self._cfg["grid_color"], linewidth=1.5
+                color=cast(str, self._cfg["grid_color"]), linewidth=1.5
             )
 
         ax.tick_params(axis="x", rotation=rotation)
