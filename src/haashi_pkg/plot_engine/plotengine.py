@@ -23,7 +23,7 @@ Example:
 """
 
 from __future__ import annotations
-
+from matplotlib.patches import FancyBboxPatch
 import logging
 from datetime import datetime
 from typing import (
@@ -91,6 +91,8 @@ Kwargs = Dict[str, Union[
 ]]
 
 QuickTheme = Literal["dark", "light"]
+DashTheme = Literal["dark", "light"]
+PanelIndex = Union[int, Tuple[int, int]]
 
 
 # ----------------------------
@@ -2034,3 +2036,1036 @@ class QuickPlot:
             text.set_color(self._cfg["title_color"])
 
         self._finalize(fig, save_path=save_path, dpi=dpi, show=show)
+
+
+# ----------------------------
+# POWERCANVAS
+# ----------------------------
+
+
+class PowerCanvas:
+    """
+    A Power BI-style dashboard builder built on top of PlotEngine.
+
+    PowerCanvas lets you compose full multi-panel dashboards — KPI cards,
+    sparklines, bar/line/scatter/pie/donut charts, and stats panels — all
+    inside a single polished figure. Two layout modes are available:
+
+    - **Preset layouts**: Call one method to get a ready-made grid structure
+      (KPI row on top + charts below, split layout, full grid, etc.)
+    - **Flexible layout**: Define your own rows/cols and place panels anywhere,
+      including spanning multiple columns or rows.
+
+    Attributes:
+        title (str): Dashboard title shown at the top.
+        theme (DashTheme): Active theme ('dark' or 'light').
+        _engine (PlotEngine): Underlying PlotEngine instance.
+        _fig (Figure): The active matplotlib Figure.
+        _panels (dict): Mapping of panel index → Axes object.
+
+    Example:
+        >>> pc = PowerCanvas(title="Sales Dashboard 2024", theme="light")
+        >>> pc.preset_kpi_top(kpi_count=4, chart_rows=1, chart_cols=2)
+        >>> pc.add_kpi_card(0, label="Revenue", value="$8.4M", delta="+12%", delta_up=True)
+        >>> pc.add_kpi_card(1, label="Orders",  value="24,842")
+        >>> pc.add_kpi_card(2, label="Customers", value="5,320")
+        >>> pc.add_kpi_card(3, label="Profit",  value="$1.6M", delta="+5%", delta_up=True)
+        >>> pc.add_bar(4, x=["North","South","East","West"], y=[134,98,112,145],
+        ...            title="Sales by Region")
+        >>> pc.add_line(5, x=months, y=revenue, title="Revenue Trend")
+        >>> pc.render(save_path="sales_dashboard.png")
+    """
+
+    # ----------------------------
+    # THEME CONFIGS
+    # ----------------------------
+
+    _THEMES: dict = {
+        "dark": {
+            "fig_color":        "#0f0f0f",
+            "canvas_color":     "#1a1a1a",
+            "panel_color":      "#242424",
+            "panel_edge":       "#3a3a3a",
+            "header_color":     "#1f1f1f",
+            "title_color":      "#ffffff",
+            "label_color":      "#cccccc",
+            "tick_color":       "#aaaaaa",
+            "grid_color":       "white",
+            "grid_alpha":       0.08,
+            "kpi_value_color":  "#ffffff",
+            "kpi_label_color":  "#aaaaaa",
+            "delta_up_color":   "#00c48c",
+            "delta_down_color": "#ff6b6b",
+            "accent":           "#4ECDC4",
+            "seaborn_style":    "darkgrid",
+            "default_colors": [
+                "#4ECDC4", "#45B7D1", "#96CEB4",
+                "#FFEAA7", "#DDA0DD", "#98D8C8",
+            ],
+        },
+        "light": {
+            "fig_color":        "#f0f2f5",
+            "canvas_color":     "#f0f2f5",
+            "panel_color":      "#ffffff",
+            "panel_edge":       "#e0e0e0",
+            "header_color":     "#1a3a5c",
+            "title_color":      "#ffffff",
+            "label_color":      "#333333",
+            "tick_color":       "#555555",
+            "grid_color":       "#cccccc",
+            "grid_alpha":       0.5,
+            "kpi_value_color":  "#1a3a5c",
+            "kpi_label_color":  "#666666",
+            "delta_up_color":   "#00a86b",
+            "delta_down_color": "#e63946",
+            "accent":           "#1a3a5c",
+            "seaborn_style":    "whitegrid",
+            "default_colors": [
+                "#1a3a5c", "#2196F3", "#4CAF50",
+                "#FF9800", "#9C27B0", "#00BCD4",
+            ],
+        },
+    }
+
+    def __init__(
+        self,
+        title: str = "Dashboard",
+        theme: DashTheme = "light",
+        figsize: Tuple[int, int] = (20, 12),
+        logger=None,
+    ) -> None:
+        """
+        Initialize PowerCanvas.
+
+        Args:
+            title: Dashboard title displayed at the top. Default is 'Dashboard'.
+            theme: Visual theme — 'dark' or 'light'. Default is 'light'.
+            figsize: Overall figure size (width, height) in inches. Default (20, 12).
+            logger: Optional Logger instance.
+
+        Example:
+            >>> pc = PowerCanvas(title="Q4 Report", theme="dark", figsize=(24, 14))
+        """
+        if theme not in self._THEMES:
+            raise ValueError(
+                f"Invalid theme '{theme}'. Choose from: {list(self._THEMES)}"
+            )
+
+        self.title:   str = title
+        self.theme:   DashTheme = theme
+        self.figsize: Tuple = figsize
+        self._engine: PlotEngine = PlotEngine(logger=logger)
+        self._cfg:    dict = self._THEMES[theme]
+
+        # State
+        self._fig:    Optional[Figure] = None
+        self._panels: Dict[int, Axes] = {}   # flat index → ax
+        self._panel_count: int = 0
+        self._layout_mode: str = "none"  # 'preset' | 'flexible'
+
+    # ----------------------------
+    # INTERNAL HELPERS
+    # ----------------------------
+
+    def _style_panel(self, ax: Axes) -> None:
+        """Apply theme styling to a panel axes."""
+        ax.set_facecolor(self._cfg["panel_color"])
+        ax.tick_params(colors=self._cfg["tick_color"])
+        ax.grid(color=self._cfg["grid_color"], alpha=self._cfg["grid_alpha"])
+        for spine in ax.spines.values():
+            spine.set_edgecolor(self._cfg["panel_edge"])
+
+    def _style_chart_ax(
+        self,
+        ax: Axes,
+        title:  Optional[str] = None,
+        xlabel: Optional[str] = None,
+        ylabel: Optional[str] = None,
+        title_fontsize: int = 13,
+        label_fontsize: int = 10,
+    ) -> None:
+        """Apply labels and tick colors to a chart panel."""
+        self._style_panel(ax)
+        if title:
+            ax.set_title(
+                title,
+                fontsize=title_fontsize,
+                color=self._cfg["label_color"],
+                fontweight="bold",
+                pad=8,
+            )
+        if xlabel:
+            ax.set_xlabel(xlabel, fontsize=label_fontsize,
+                          color=self._cfg["label_color"])
+        if ylabel:
+            ax.set_ylabel(ylabel, fontsize=label_fontsize,
+                          color=self._cfg["label_color"])
+        ax.tick_params(axis="both", colors=self._cfg["tick_color"],
+                       labelsize=9)
+
+    def _get_panel(self, index: PanelIndex) -> Axes:
+        """Retrieve an axes panel by index."""
+        if isinstance(index, tuple):
+            key = index[0] * 100 + index[1]  # row*100+col as flat key
+        else:
+            key = index
+        if key not in self._panels:
+            raise KeyError(
+                f"Panel {index} not found. "
+                "Did you call a layout method first?"
+            )
+        return self._panels[key]
+
+    def _register_panel(self, key: int, ax: Axes) -> None:
+        """Register an axes under a flat key."""
+        self._panels[key] = ax
+
+    def _draw_header(self, fig: Figure, title: str) -> None:
+        """Draw the dashboard title header band at the top."""
+        header_ax = fig.add_axes([0, 0.955, 1, 0.045])
+        header_ax.set_facecolor(self._cfg["header_color"])
+        header_ax.axis("off")
+        header_ax.text(
+            0.02, 0.5, title,
+            transform=header_ax.transAxes,
+            fontsize=16,
+            fontweight="bold",
+            color=self._cfg["title_color"],
+            va="center",
+        )
+
+    # ----------------------------
+    # LAYOUT — PRESETS
+    # ----------------------------
+
+    def preset_kpi_top(
+        self,
+        kpi_count:  int = 4,
+        chart_rows: int = 1,
+        chart_cols: int = 2,
+        kpi_height_ratio: float = 0.28,
+    ) -> "PowerCanvas":
+        """
+        Preset layout: a row of KPI cards across the top, charts below.
+
+        This is the most common Power BI layout — summary numbers on top,
+        detail charts underneath.
+
+        Panel indexing:
+        - KPI cards:   0, 1, 2, ... (kpi_count - 1)
+        - Chart panels: kpi_count, kpi_count+1, ... left-to-right, top-to-bottom
+
+        Args:
+            kpi_count: Number of KPI cards in the top row. Default is 4.
+            chart_rows: Number of chart rows below KPIs. Default is 1.
+            chart_cols: Number of chart columns. Default is 2.
+            kpi_height_ratio: Fraction of height given to KPI row. Default 0.28.
+
+        Returns:
+            self (for optional chaining)
+
+        Example:
+            >>> pc = PowerCanvas(title="Sales Overview", theme="light")
+            >>> pc.preset_kpi_top(kpi_count=4, chart_rows=2, chart_cols=3)
+            >>> pc.add_kpi_card(0, label="Revenue", value="$8.4M")
+            >>> pc.add_bar(4, x=cats, y=vals, title="By Category")
+        """
+        cols = max(kpi_count, chart_cols)
+        total_rows = 1 + chart_rows
+
+        height_ratios = [kpi_height_ratio] + [
+            (1 - kpi_height_ratio) / chart_rows
+        ] * chart_rows
+
+        self._fig = plt.figure(figsize=self.figsize)
+        self._fig.patch.set_facecolor(self._cfg["fig_color"])
+
+        gs = gridspec.GridSpec(
+            total_rows, cols,
+            figure=self._fig,
+            height_ratios=height_ratios,
+            hspace=0.45,
+            wspace=0.35,
+            top=0.94, bottom=0.06,
+            left=0.04, right=0.97,
+        )
+
+        # KPI panels
+        kpi_col_span = cols // kpi_count
+        for i in range(kpi_count):
+            col_start = i * kpi_col_span
+            col_end = col_start + kpi_col_span
+            ax = self._fig.add_subplot(gs[0, col_start:col_end])
+            ax.axis("off")
+            ax.set_facecolor(self._cfg["panel_color"])
+            self._register_panel(i, ax)
+
+        # Chart panels
+        chart_idx = kpi_count
+        for r in range(chart_rows):
+            for c in range(chart_cols):
+                if c < cols:
+                    ax = self._fig.add_subplot(gs[r + 1, c])
+                    self._style_panel(ax)
+                    self._register_panel(chart_idx, ax)
+                    chart_idx += 1
+
+        self._panel_count = chart_idx
+        self._layout_mode = "preset"
+        self._draw_header(self._fig, self.title)
+        return self
+
+    def preset_split(
+        self,
+        kpi_count: int = 3,
+        left_width_ratio: float = 0.65,
+    ) -> "PowerCanvas":
+        """
+        Preset layout: wide chart/content on the left, KPI stack on the right.
+
+        Panel indexing:
+        - 0: Left wide panel (full height chart)
+        - 1, 2, 3...: Right-side KPI/chart panels stacked vertically
+
+        Args:
+            kpi_count: Number of stacked panels on the right. Default is 3.
+            left_width_ratio: Fraction of width for the left panel. Default 0.65.
+
+        Returns:
+            self
+
+        Example:
+            >>> pc = PowerCanvas(title="Overview", theme="dark")
+            >>> pc.preset_split(kpi_count=3)
+            >>> pc.add_bar(0, x=months, y=revenue, title="Revenue by Month")
+            >>> pc.add_kpi_card(1, label="Total", value="$1.2M")
+            >>> pc.add_kpi_card(2, label="Growth", value="+18%", delta_up=True)
+            >>> pc.add_kpi_card(3, label="Customers", value="4,201")
+        """
+        right_ratio = 1 - left_width_ratio
+
+        self._fig = plt.figure(figsize=self.figsize)
+        self._fig.patch.set_facecolor(self._cfg["fig_color"])
+
+        # Left panel
+        left_ax = self._fig.add_axes(
+            [0.03, 0.07, left_width_ratio - 0.06, 0.85]
+        )
+        self._style_panel(left_ax)
+        self._register_panel(0, left_ax)
+
+        # Right stacked panels
+        panel_h = 0.85 / kpi_count
+        for i in range(kpi_count):
+            bottom = 0.07 + (kpi_count - 1 - i) * panel_h
+            ax = self._fig.add_axes([
+                left_width_ratio + 0.01,
+                bottom + 0.01,
+                right_ratio - 0.04,
+                panel_h - 0.02,
+            ])
+            ax.axis("off")
+            ax.set_facecolor(self._cfg["panel_color"])
+            self._register_panel(i + 1, ax)
+
+        self._panel_count = kpi_count + 1
+        self._layout_mode = "preset"
+        self._draw_header(self._fig, self.title)
+        return self
+
+    def preset_full_grid(
+        self,
+        rows: int = 2,
+        cols: int = 3,
+    ) -> "PowerCanvas":
+        """
+        Preset layout: even N×M grid of chart panels.
+
+        Panels are indexed left-to-right, top-to-bottom starting at 0.
+
+        Args:
+            rows: Number of rows. Default is 2.
+            cols: Number of columns. Default is 3.
+
+        Returns:
+            self
+
+        Example:
+            >>> pc = PowerCanvas(title="Full Grid Dashboard", theme="light")
+            >>> pc.preset_full_grid(rows=2, cols=3)
+            >>> pc.add_bar(0, x=cats, y=vals, title="Sales")
+            >>> pc.add_line(1, x=months, y=revenue, title="Trend")
+            >>> pc.add_pie(2, values=[40,30,20,10], title="Share")
+        """
+        self._fig = plt.figure(figsize=self.figsize)
+        self._fig.patch.set_facecolor(self._cfg["fig_color"])
+
+        gs = gridspec.GridSpec(
+            rows, cols,
+            figure=self._fig,
+            hspace=0.45,
+            wspace=0.35,
+            top=0.93, bottom=0.07,
+            left=0.05, right=0.97,
+        )
+
+        idx = 0
+        for r in range(rows):
+            for c in range(cols):
+                ax = self._fig.add_subplot(gs[r, c])
+                self._style_panel(ax)
+                self._register_panel(idx, ax)
+                idx += 1
+
+        self._panel_count = idx
+        self._layout_mode = "preset"
+        self._draw_header(self._fig, self.title)
+        return self
+
+    # ----------------------------
+    # LAYOUT — FLEXIBLE
+    # ----------------------------
+
+    def create_canvas(
+        self,
+        rows: int = 3,
+        cols: int = 3,
+        height_ratios: Optional[List[float]] = None,
+        width_ratios:  Optional[List[float]] = None,
+        hspace: float = 0.45,
+        wspace: float = 0.35,
+    ) -> "PowerCanvas":
+        """
+        Flexible layout: define your own grid and place panels manually.
+
+        Use fig.add_subplot(gs[row, col]) style via add_* methods with
+        (row, col) tuple indices. Supports col_span and row_span in panel methods.
+
+        Args:
+            rows: Number of rows in the grid.
+            cols: Number of columns in the grid.
+            height_ratios: Relative row heights. None for equal.
+            width_ratios: Relative column widths. None for equal.
+            hspace: Vertical spacing between panels. Default 0.45.
+            wspace: Horizontal spacing between panels. Default 0.35.
+
+        Returns:
+            self
+
+        Example:
+            >>> pc = PowerCanvas(title="Custom Layout", theme="dark")
+            >>> pc.create_canvas(rows=3, cols=4,
+            ...                  height_ratios=[0.2, 0.4, 0.4])
+            >>> pc.add_kpi_card((0,0), label="Revenue", value="$8.4M")
+            >>> pc.add_bar((1,0), x=cats, y=vals, title="Sales", col_span=2)
+        """
+        self._fig = plt.figure(figsize=self.figsize)
+        self._fig.patch.set_facecolor(self._cfg["fig_color"])
+
+        self._gs = gridspec.GridSpec(
+            rows, cols,
+            figure=self._fig,
+            height_ratios=height_ratios,
+            width_ratios=width_ratios,
+            hspace=hspace,
+            wspace=wspace,
+            top=0.93, bottom=0.07,
+            left=0.04, right=0.97,
+        )
+        self._flex_rows = rows
+        self._flex_cols = cols
+        self._layout_mode = "flexible"
+        self._draw_header(self._fig, self.title)
+        return self
+
+    def _get_or_create_flex_panel(
+        self,
+        index: PanelIndex,
+        col_span: int = 1,
+        row_span: int = 1,
+        kpi: bool = False,
+    ) -> Axes:
+        """Get or create a panel in flexible mode."""
+        if isinstance(index, tuple):
+            row, col = index
+            key = row * 100 + col
+        else:
+            raise ValueError(
+                "Flexible layout requires (row, col) tuple as panel index."
+            )
+
+        if key not in self._panels:
+            r_slice = slice(row, row + row_span)
+            c_slice = slice(col, col + col_span)
+            ax = self._fig.add_subplot(self._gs[r_slice, c_slice])
+            if kpi:
+                ax.axis("off")
+                ax.set_facecolor(self._cfg["panel_color"])
+            else:
+                self._style_panel(ax)
+            self._register_panel(key, ax)
+
+        return self._panels[key]
+
+    # ----------------------------
+    # PANEL — KPI CARD
+    # ----------------------------
+
+    def add_kpi_card(
+        self,
+        index: PanelIndex,
+        *,
+        label: str,
+        value: str,
+        delta: Optional[str] = None,
+        delta_up: Optional[bool] = None,
+        sparkline_data: Optional[Iterable] = None,
+        icon: Optional[str] = None,
+        col_span: int = 1,
+        row_span: int = 1,
+    ) -> "PowerCanvas":
+        """
+        Add a KPI card to a panel.
+
+        KPI cards display a large metric value with an optional label,
+        delta indicator (↑ / ↓), and mini sparkline trend chart.
+
+        Args:
+            index: Panel index. Int for preset layouts, (row, col) for flexible.
+            label: Metric name displayed above the value (e.g. 'Total Revenue').
+            value: The main metric value as a string (e.g. '$8.42M', '24,842').
+            delta: Optional change indicator string (e.g. '+12%', '-3%').
+            delta_up: True if delta is positive (green), False if negative (red).
+                      Required when delta is provided.
+            sparkline_data: Optional iterable of numbers for a mini trend line.
+            icon: Optional single emoji/character shown next to the label.
+            col_span: Column span for flexible layouts. Default is 1.
+            row_span: Row span for flexible layouts. Default is 1.
+
+        Returns:
+            self
+
+        Example:
+            >>> pc.add_kpi_card(
+            ...     0,
+            ...     label="Total Revenue",
+            ...     value="$8.42M",
+            ...     delta="+12%",
+            ...     delta_up=True,
+            ...     sparkline_data=[52, 58, 54, 61, 67, 72, 69, 75]
+            ... )
+        """
+        if self._layout_mode == "flexible":
+            ax = self._get_or_create_flex_panel(
+                index, col_span=col_span, row_span=row_span, kpi=True
+            )
+        else:
+            ax = self._get_panel(index)
+
+        ax.axis("off")
+        ax.set_facecolor(self._cfg["panel_color"])
+
+        # Draw card background with rounded look
+        bg = FancyBboxPatch(
+            (0.03, 0.05), 0.94, 0.90,
+            boxstyle="round,pad=0.02",
+            facecolor=self._cfg["panel_color"],
+            edgecolor=self._cfg["panel_edge"],
+            linewidth=1.5,
+            transform=ax.transAxes,
+            zorder=0,
+        )
+        ax.add_patch(bg)
+
+        # Accent bar on left edge
+        accent_bar = FancyBboxPatch(
+            (0.03, 0.05), 0.025, 0.90,
+            boxstyle="round,pad=0.01",
+            facecolor=self._cfg["accent"],
+            edgecolor="none",
+            transform=ax.transAxes,
+            zorder=1,
+        )
+        ax.add_patch(accent_bar)
+
+        # Layout: with sparkline → left text, right mini chart
+        has_spark = sparkline_data is not None
+
+        # Label
+        label_text = f"{icon}  {label}" if icon else label
+        ax.text(
+            0.13, 0.80, label_text,
+            transform=ax.transAxes,
+            fontsize=10,
+            color=self._cfg["kpi_label_color"],
+            fontweight="normal",
+            va="top",
+        )
+
+        # Main value
+        ax.text(
+            0.13, 0.52, value,
+            transform=ax.transAxes,
+            fontsize=22,
+            color=self._cfg["kpi_value_color"],
+            fontweight="bold",
+            va="center",
+        )
+
+        # Delta
+        if delta is not None:
+            arrow = "▲" if delta_up else "▼"
+            d_color = (
+                self._cfg["delta_up_color"]
+                if delta_up
+                else self._cfg["delta_down_color"]
+            )
+            ax.text(
+                0.13, 0.22,
+                f"{arrow} {delta}",
+                transform=ax.transAxes,
+                fontsize=10,
+                color=d_color,
+                fontweight="bold",
+                va="bottom",
+            )
+
+        # Sparkline (inset axes on the right side of the card)
+        if has_spark:
+            spark_ax = ax.inset_axes([0.62, 0.15, 0.34, 0.60])
+            data = list(sparkline_data)
+            spark_ax.plot(
+                data,
+                color=self._cfg["accent"],
+                linewidth=1.8,
+                solid_capstyle="round",
+            )
+            spark_ax.fill_between(
+                range(len(data)), data,
+                alpha=0.15,
+                color=self._cfg["accent"],
+            )
+            spark_ax.axis("off")
+            spark_ax.set_facecolor("none")
+
+        return self
+
+    # ----------------------------
+    # PANEL — CHARTS
+    # ----------------------------
+
+    def add_bar(
+        self,
+        index: PanelIndex,
+        x: XData,
+        y: YData,
+        *,
+        title:        Optional[str] = None,
+        xlabel:       Optional[str] = None,
+        ylabel:       Optional[str] = None,
+        color:        Optional[str] = None,
+        value_labels: bool = False,
+        value_format: str = "{:.0f}",
+        rotation:     int = 45,
+        ref_y:        Optional[float] = None,
+        ref_label:    Optional[str] = None,
+        ylim=None,
+        col_span: int = 1,
+        row_span: int = 1,
+    ) -> "PowerCanvas":
+        """
+        Add a bar chart to a panel.
+
+        Args:
+            index: Panel index. Int for preset, (row, col) for flexible.
+            x: Category labels.
+            y: Bar height values.
+            title: Panel title.
+            xlabel: X-axis label.
+            ylabel: Y-axis label.
+            color: Bar color. Defaults to theme accent.
+            value_labels: Show values on top of bars. Default False.
+            value_format: Format string for value labels. Default '{:.0f}'.
+            rotation: X tick label rotation. Default 45.
+            ref_y: Optional horizontal reference line.
+            ref_label: Label for reference line.
+            ylim: Y-axis limits. Tuple, 'zero', or None.
+            col_span: Column span for flexible layouts.
+            row_span: Row span for flexible layouts.
+
+        Returns:
+            self
+
+        Example:
+            >>> pc.add_bar(
+            ...     4,
+            ...     x=["North", "South", "East", "West"],
+            ...     y=[134000, 98000, 112000, 145000],
+            ...     title="Sales by Region",
+            ...     value_labels=True,
+            ...     value_format="${:,.0f}",
+            ...     ylim=(0, 170000),
+            ... )
+        """
+        clr = color or self._cfg["accent"]
+
+        if self._layout_mode == "flexible":
+            ax = self._get_or_create_flex_panel(
+                index, col_span=col_span, row_span=row_span
+            )
+        else:
+            ax = self._get_panel(index)
+
+        self._engine.draw(ax, x=x, y=y, plot_type="bar",
+                          color=clr, edgecolor=self._cfg["panel_color"])
+
+        if value_labels:
+            self._engine.add_value_labels_on_bars(
+                ax,
+                format_string=value_format,
+                color=self._cfg["label_color"],
+                fontsize=9,
+            )
+
+        if ref_y is not None:
+            self._engine.add_reference_line(
+                ax, y=ref_y, label=ref_label,
+                color=self._cfg["grid_color"], linewidth=1.5
+            )
+
+        ax.tick_params(axis="x", rotation=rotation)
+        if ylim is not None:
+            if ylim == "zero":
+                ax.set_ylim(bottom=0)
+            else:
+                ax.set_ylim(ylim)
+
+        self._style_chart_ax(ax, title=title, xlabel=xlabel, ylabel=ylabel)
+        return self
+
+    def add_line(
+        self,
+        index: PanelIndex,
+        x: XData,
+        y: YData,
+        *,
+        title:      Optional[str] = None,
+        xlabel:     Optional[str] = None,
+        ylabel:     Optional[str] = None,
+        color:      Optional[str] = None,
+        linewidth:  float = 2.0,
+        marker:     Optional[str] = None,
+        markersize: int = 5,
+        fill:       bool = True,
+        ref_y:      Optional[float] = None,
+        ref_label:  Optional[str] = None,
+        ylim=None,
+        col_span: int = 1,
+        row_span: int = 1,
+    ) -> "PowerCanvas":
+        """
+        Add a line chart to a panel.
+
+        Args:
+            index: Panel index.
+            x: X-axis data.
+            y: Y-axis numeric data.
+            title: Panel title.
+            xlabel: X-axis label.
+            ylabel: Y-axis label.
+            color: Line color. Defaults to theme accent.
+            linewidth: Line width. Default 2.0.
+            marker: Marker style. None for no markers.
+            markersize: Marker size. Default 5.
+            fill: Fill area under the line. Default True.
+            ref_y: Optional horizontal reference line.
+            ref_label: Label for reference line.
+            ylim: Y-axis limits.
+            col_span: Column span for flexible layouts.
+            row_span: Row span for flexible layouts.
+
+        Returns:
+            self
+
+        Example:
+            >>> pc.add_line(
+            ...     5,
+            ...     x=months,
+            ...     y=revenue,
+            ...     title="Revenue Over Time",
+            ...     fill=True,
+            ...     ref_y=70000,
+            ...     ref_label="Target",
+            ... )
+        """
+        clr = color or self._cfg["accent"]
+
+        if self._layout_mode == "flexible":
+            ax = self._get_or_create_flex_panel(
+                index, col_span=col_span, row_span=row_span
+            )
+        else:
+            ax = self._get_panel(index)
+
+        self._engine.draw(
+            ax, x=x, y=y, plot_type="line",
+            color=clr,
+            linewidth=linewidth,
+            **({"marker": marker, "markersize": markersize}
+               if marker else {}),
+        )
+
+        if fill:
+            ax.fill_between(
+                range(len(list(y))) if not hasattr(
+                    x, '__len__') else range(len(x)),
+                list(y),
+                alpha=0.12,
+                color=clr,
+            )
+
+        if ref_y is not None:
+            self._engine.add_reference_line(
+                ax, y=ref_y, label=ref_label,
+                color="gray", linewidth=1.5
+            )
+            if ref_label:
+                self._engine.set_legend(ax, fontsize=9)
+
+        if ylim is not None:
+            if ylim == "zero":
+                ax.set_ylim(bottom=0)
+            else:
+                ax.set_ylim(ylim)
+
+        self._style_chart_ax(ax, title=title, xlabel=xlabel, ylabel=ylabel)
+        return self
+
+    def add_scatter(
+        self,
+        index: PanelIndex,
+        x: XData,
+        y: YData,
+        *,
+        title:   Optional[str] = None,
+        xlabel:  Optional[str] = None,
+        ylabel:  Optional[str] = None,
+        color:   Optional[str] = None,
+        size:    int = 60,
+        alpha:   float = 0.7,
+        ref_y:   Optional[float] = None,
+        col_span: int = 1,
+        row_span: int = 1,
+    ) -> "PowerCanvas":
+        """
+        Add a scatter plot to a panel.
+
+        Args:
+            index: Panel index.
+            x: X-axis data.
+            y: Y-axis numeric data.
+            title: Panel title.
+            xlabel: X-axis label.
+            ylabel: Y-axis label.
+            color: Marker color. Defaults to theme accent.
+            size: Marker size. Default 60.
+            alpha: Marker transparency. Default 0.7.
+            ref_y: Optional horizontal reference line.
+            col_span: Column span for flexible layouts.
+            row_span: Row span for flexible layouts.
+
+        Returns:
+            self
+        """
+        clr = color or self._cfg["accent"]
+
+        if self._layout_mode == "flexible":
+            ax = self._get_or_create_flex_panel(
+                index, col_span=col_span, row_span=row_span
+            )
+        else:
+            ax = self._get_panel(index)
+
+        self._engine.draw(ax, x=x, y=y, plot_type="scatter",
+                          color=clr, s=size, alpha=alpha)
+
+        if ref_y is not None:
+            self._engine.add_reference_line(ax, y=ref_y, color="gray",
+                                            linewidth=1.5)
+
+        self._style_chart_ax(ax, title=title, xlabel=xlabel, ylabel=ylabel)
+        return self
+
+    def add_pie(
+        self,
+        index: PanelIndex,
+        values: YData,
+        *,
+        labels:     Optional[Iterable[str]] = None,
+        title:      Optional[str] = None,
+        colors:     Optional[Iterable[str]] = None,
+        autopct:    str = "%1.1f%%",
+        donut:      bool = False,
+        explode:    Optional[Iterable[float]] = None,
+        col_span: int = 1,
+        row_span: int = 1,
+    ) -> "PowerCanvas":
+        """
+        Add a pie or donut chart to a panel.
+
+        Args:
+            index: Panel index.
+            values: Numeric values for each slice.
+            labels: Slice labels.
+            title: Panel title.
+            colors: Slice colors. Defaults to theme palette.
+            autopct: Percentage format string. Default '%1.1f%%'.
+            donut: If True, renders as a donut chart. Default False.
+            explode: Slice offsets for emphasis.
+            col_span: Column span for flexible layouts.
+            row_span: Row span for flexible layouts.
+
+        Returns:
+            self
+
+        Example:
+            >>> pc.add_pie(
+            ...     2,
+            ...     values=[38, 24, 18, 13, 7],
+            ...     labels=["Electronics","Clothing","Food","Home","Other"],
+            ...     title="Revenue by Category",
+            ...     donut=True,
+            ... )
+        """
+        clrs = colors or self._cfg["default_colors"]
+
+        if self._layout_mode == "flexible":
+            ax = self._get_or_create_flex_panel(
+                index, col_span=col_span, row_span=row_span
+            )
+        else:
+            ax = self._get_panel(index)
+
+        wedge_props = {"width": 0.5} if donut else {}
+
+        self._engine.draw(
+            ax, x=None, y=values, plot_type="pie",
+            labels=labels,
+            colors=clrs,
+            autopct=autopct,
+            startangle=140,
+            **({"explode": explode} if explode is not None else {}),
+            wedgeprops=wedge_props if donut else {},
+        )
+
+        # Style text to match theme
+        for text in ax.texts:
+            text.set_color(self._cfg["label_color"])
+            text.set_fontsize(8)
+
+        ax.set_facecolor(self._cfg["panel_color"])
+
+        if title:
+            ax.set_title(
+                title,
+                fontsize=13,
+                color=self._cfg["label_color"],
+                fontweight="bold",
+                pad=8,
+            )
+
+        return self
+
+    def add_stats_panel(
+        self,
+        index: PanelIndex,
+        stats: Dict[str, Union[str, int, float]],
+        *,
+        title:    Optional[str] = None,
+        col_span: int = 1,
+        row_span: int = 1,
+    ) -> "PowerCanvas":
+        """
+        Add a statistics text panel.
+
+        Displays a dictionary of key-value metrics in a styled text box.
+        Useful for summary panels alongside charts.
+
+        Args:
+            index: Panel index.
+            stats: Dict of metric_name: value pairs.
+            title: Optional panel title.
+            col_span: Column span for flexible layouts.
+            row_span: Row span for flexible layouts.
+
+        Returns:
+            self
+
+        Example:
+            >>> pc.add_stats_panel(
+            ...     3,
+            ...     stats={"Total Sales": 145000, "Avg Order": 58.3, "Returns": "2.1%"},
+            ...     title="Summary"
+            ... )
+        """
+        if self._layout_mode == "flexible":
+            ax = self._get_or_create_flex_panel(
+                index, col_span=col_span, row_span=row_span, kpi=True
+            )
+        else:
+            ax = self._get_panel(index)
+
+        self._engine.create_stats_text_box(
+            ax, stats,
+            title=title,
+            box_color=self._cfg["panel_color"],
+            text_color=self._cfg["kpi_value_color"],
+            border_color=self._cfg["accent"],
+            border_width=2,
+            fontsize=11,
+            title_fontsize=13,
+        )
+        return self
+
+    # ----------------------------
+    # FINALIZE
+    # ----------------------------
+
+    def render(
+        self,
+        save_path: Optional[str] = None,
+        dpi:       int = 150,
+        show:      bool = True,
+    ) -> None:
+        """
+        Finalize and render the dashboard.
+
+        Call this last, after all panels have been populated.
+        Handles tight layout, saving, displaying, and cleanup.
+
+        Args:
+            save_path: File path to save (e.g. 'dashboard.png'). None to skip.
+            dpi: Image resolution. Default 150.
+            show: Whether to display the figure. Default True.
+
+        Example:
+            >>> pc.render(save_path="dashboard.png", dpi=200, show=False)
+        """
+        if self._fig is None:
+            raise RuntimeError(
+                "No canvas created. Call a layout method first "
+                "(e.g. preset_kpi_top(), create_canvas())."
+            )
+
+        if save_path is not None:
+            safe_path = self._engine.handler.ensure_writable_path(save_path)
+            self._fig.savefig(
+                safe_path, dpi=dpi,
+                facecolor=self._cfg["fig_color"],
+                bbox_inches="tight",
+            )
+
+        if show:
+            plt.show()
+
+        plt.close(self._fig)

@@ -93,6 +93,7 @@ from haashi_pkg.plot_engine.plotengine import (
     # Main class
     PlotEngine,
     QuickPlot,
+    PowerCanvas,
 
     # Exceptions
     PlotEngineError,
@@ -104,6 +105,7 @@ from haashi_pkg.plot_engine.plotengine import (
 __all__ = [
     'PlotEngine',
     'QuickPlot',
+    'PowerCanvas',
     'PlotEngineError',
     'InvalidPlotTypeError',
     'InvalidDataError',
